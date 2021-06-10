@@ -1,0 +1,32 @@
+#! /bin/bash
+
+#
+#  pipe daemon that routes commands through one pipe and 
+#  reads the return output from another pipe.
+#
+#  Naming is from the point of view of the commander
+#
+
+egress=/tmp/egress.pipe
+ingress=/tmp/ingress.pipe
+
+if [ ! -p "$egress" ]; then
+   mkfifo $egress
+   chmod 666 $egress
+fi
+
+if [ ! -p "$ingress" ]; then
+   mkfifo $ingress
+   chmod 666 $ingress
+fi
+
+while true
+do
+   if read cmd < $egress; then
+      if [[ "$cmd" == 'quit' ]]; then
+         echo "piped exiting..." > $ingress
+         break
+      fi
+      $cmd > $ingress
+   fi
+done

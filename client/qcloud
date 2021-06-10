@@ -1,0 +1,502 @@
+#! /usr/local/bin/python3.6
+
+import re
+import os
+import sys
+import getpass
+import pathlib
+import configparser
+import urllib.parse
+import urllib.request
+
+DEBUG = 0
+
+def debug(msg):
+    if (DEBUG):
+       print("DEBUG: %s" % msg)
+
+
+config_locations = [ os.path.join(pathlib.Path.home(), ".qcloud_client.cfg"),
+                     'qcloud_client.cfg',
+                     '.qcloud_client.cfg' ]
+  
+config_file = None
+
+for loc in config_locations:
+    if (os.path.isfile(loc)):
+       config_file = loc
+       break
+
+if (config_file is None):
+   print("Unable to find config file")
+   exit(1)
+
+
+debug('Using config file {}'.format(config_file))
+
+config = configparser.ConfigParser()
+config.read(config_file)
+
+AUTH_HOST  = "http://" + config.get("qcloud", "authorisation_host") 
+AUTH_HOST += ":"       + config.get("qcloud", "authorisation_port")
+COMP_HOST  = "http://" + config.get("qcloud", "computation_host") 
+COMP_HOST += ":"       + config.get("qcloud", "computation_port")
+
+
+class QcloudError(Exception):
+    pass
+
+
+
+class InvalidToken(Exception):
+    pass
+
+
+
+def help(arg):
+    if (len(arg) == 0):
+       arg = "Submits Q-Chem calculations to a cloud server."
+    print(arg)
+    print("""Usage:
+    qcloud submit  qcinput
+    qcloud batch   batchfile  input1 [input2...]
+    qcloud get     qcinput
+    qcloud getall  [pattern]
+    qcloud clear   [pattern]
+    qcloud status  [qcinput/pattern]
+    qcloud adduser [username]""")
+    exit(0)
+
+
+
+
+
+def username_is_valid(uname):
+    regexp = re.compile("^(?=.{3,20}$)(?![_.])(?!.*[_.]{2})[a-zA-Z0-9._]+(?<![_.])$")
+    return regexp.match(uname) 
+
+
+
+def check_response_status(response):
+    status = response.headers.get("Qcloud-Server-Status")
+    if (status == "OK"):
+       return True
+    else:
+       msg = response.headers.get("Qcloud-Server-Message")
+       if (msg is None):
+          msg = "Request failed"
+       elif 'JWT' in msg: 
+          raise InvalidToken(msg)
+       else:
+          msg = "Request failed: " + msg
+          print(msg)
+
+       return False
+
+
+
+def request_token(username, password):
+    req = urllib.request.Request(AUTH_HOST + "/token")
+    req.add_header('Qcloud-Client-User', username)
+    req.add_header('Qcloud-Client-Password', password)
+
+    res = urllib.request.urlopen(req)
+    if (check_response_status(res)):
+       token = res.headers.get("Qcloud-Token")
+       return token
+    
+
+
+def request_adduser(username, password, authorisation):
+    req = urllib.request.Request(AUTH_HOST + "/adduser")
+    req.add_header('Qcloud-Client-User', username)
+    req.add_header('Qcloud-Client-Password', password)
+    req.add_header('Qcloud-Client-Authorisation', authorisation)
+
+    res = urllib.request.urlopen(req)
+    if (check_response_status(res)):
+       token = res.headers.get("Qcloud-Token")
+       return token
+
+
+
+def request_submit(token, input):
+    debug("Entering request_submit subroutine")
+    cookie = urllib.parse.urlencode({'cookie' : token })
+    url = COMP_HOST + "/submit?" + cookie
+    data = ''.join(input)
+    data = data.encode('ascii')
+    debug("  data: %s" % data)
+
+    req = urllib.request.Request(url, data)
+    res = urllib.request.urlopen(req, timeout=5)
+    debug("Submit URL: %s" % url)
+
+    jobid = 0
+    if (check_response_status(res)):
+       jobid = res.headers.get("Qcloud-Server-Jobid")
+
+    return jobid 
+
+
+
+def request_new_token():
+    if ("user" not in config):
+       raise QcloudError("Use 'qcloud adduser' to set user name")
+    username = config.get("user", "name")
+    prompt = "Password for " + username + ": "
+    password = getpass.getpass(prompt)
+
+    req = urllib.request.Request(AUTH_HOST + "/token")
+    req.add_header('Qcloud-Client-User', username)
+    req.add_header('Qcloud-Client-Password', password)
+
+    res = urllib.request.urlopen(req)
+    if (not check_response_status(res)):
+       raise QcloudError("Unable to obtain new token") 
+
+    token = res.headers.get("Qcloud-Token")
+    config.set("user", "token", token)
+    with open(config_file, 'w') as cfg:
+         config.write(cfg)
+    return token
+
+
+
+def request_status(token, jobid):
+    data = urllib.parse.urlencode({'cookie' : token, 'jobid' : jobid })
+    data = data.encode('ascii')
+    req  = urllib.request.Request(COMP_HOST + "/status", data)
+    res  = urllib.request.urlopen(req)
+
+    if (check_response_status(res)):
+       status = res.headers.get("Qcloud-Server-Jobstatus")
+       return status 
+
+
+
+def request_delete(token, jobid):
+    data = urllib.parse.urlencode({'cookie' : token, 'jobid' : jobid })
+    data = data.encode('ascii')
+    req  = urllib.request.Request(COMP_HOST + "/delete", data)
+    res  = urllib.request.urlopen(req)
+
+    if (check_response_status(res)):
+       status = res.headers.get("Qcloud-Server-Jobstatus")
+       return status 
+
+
+
+def request_list(token, jobid):
+    data = urllib.parse.urlencode({'cookie' : token, 'jobid' : jobid })
+    data = data.encode('ascii')
+    req  = urllib.request.Request(COMP_HOST + "/list", data)
+    res  = urllib.request.urlopen(req)
+    if (check_response_status(res)):
+       files = res.read().decode().split("\n") 
+       while("" in files):
+           files.remove("")
+       return files
+
+
+
+def request_download(token, jobid, file):
+    data = urllib.parse.urlencode({'cookie' : token, 'jobid' : jobid, 'file' : file })
+    data = data.encode('ascii')
+    req  = urllib.request.Request(COMP_HOST + "/download", data)
+    res  = urllib.request.urlopen(req)
+
+    if (check_response_status(res)):
+       return res.read().decode()
+
+
+
+def get_current_token():
+    if ("user" not in config or "token" not in config["user"]):
+         raise QcloudError("Use 'qcloud adduser' to set user name")
+    return config.get("user", "token")
+
+
+
+def adduser(args):
+    if ("user" in config and "name" in config["user"]):
+       raise QcloudError("User " + config.get("user", "name") + " exists in " + config_file)
+
+    rootpw = getpass.getpass("Qcloud admin password: ")
+    token  = request_token(config.get("qcloud","admin_account"), rootpw)
+    uname  = sys.argv[0] if (len(args) == 1) else input("User name: ")
+
+    if (not username_is_valid(uname)):
+       print("Usage:  qcloud adduser [username]")
+       raise QcloudError("User name must betweeen 3-20 alphanumeric characters")
+
+    tries = 0
+    prompt = "Password for " + uname + ": "
+    userpw = getpass.getpass(prompt)
+    while (len(userpw) < 6 and tries < 3):
+        print("Password must be at least 6 characters") 
+        userpw = getpass.getpass(prompt)
+        ++tries
+    if (tries == 3): 
+       raise QcloudError("Request failed: password too short")
+
+    userpw2 = getpass.getpass("Re-enter password: ")
+    if (userpw != userpw2):  
+       raise QcloudError("Request failed: passwords do not match")
+
+    token = request_adduser(uname, userpw, rootpw)
+
+    if (token):
+       if ("user" not in config):
+          config.add_section("user")
+       config.set("user", "name", uname)
+       config.set("user", "token", token)
+       with open(config_file, 'w') as cfg:
+            config.write(cfg)
+       print("User " + uname + " added successfully")
+
+
+
+def add_job(jid, fname):
+    if ("jobs" not in config):
+       config.add_section("jobs")
+    config.set("jobs", jid, fname)
+    with open(config_file, 'w') as cfg:
+         config.write(cfg)
+
+
+def remove_job(jid):
+    del config["jobs"][jid]
+    with open(config_file, 'w') as cfg:
+         config.write(cfg)
+
+
+
+def matching_jobs(patterns):
+    if ("jobs" not in config):
+       raise  QcloudError("No jobs found")
+
+    all_jobs = config["jobs"]
+    jobs = []
+
+    if (len(patterns) == 0):
+       jobs = all_jobs
+    else:
+       for jobid in all_jobs:
+           for p in patterns:
+               if (p in all_jobs[jobid]):
+                  jobs.append(jobid) 
+                  break
+    return jobs
+
+
+
+def relpath(jobid):
+    job = config.get("jobs", jobid)
+    (dir, job) = os.path.split(job)
+    dir = os.path.relpath(dir)
+    return os.path.join(dir,job)
+
+
+
+def status(args):
+    jobs = matching_jobs(args)
+
+    for jobid in jobs:
+        status = request_status(get_current_token(), jobid)
+        if (status == "INVALID"):
+           print("Removing invalid job id: %s" % jobid)
+           remove_job(jobid)
+        else:
+           status = "{0:<8}".format(str(status))
+           print(status, relpath(jobid))
+
+
+def delete(args):
+    jobs = matching_jobs(args)
+
+    for jobid in jobs:
+        status = request_delete(get_current_token(), jobid)
+        print("Deleteing job from queue id: %s - status" % (jobid,status))
+
+
+
+
+def download(jobs):
+    for jobid in jobs:
+        debug("downloading files for {}".format(jobid))
+        path = relpath(jobid)
+        (dir, inp) = os.path.split(path)
+        (base,ext) = os.path.splitext(inp)
+        
+        if (not (ext == ".inp" or ext == ".in" or ext == ".qcin")):
+           base = inp 
+
+        files = request_list(get_current_token(), jobid)
+        if (not files):
+           raise QcloudError("No files to download")
+        fnames = { "input"      : inp, 
+                   "output"     : base + ".out",
+                   "fchk"       : base + ".fchk",
+                   "input.fchk" : base + ".fchk" }
+
+        k = 1; # used to generate unique filenames
+        for file in files:
+            debug("downloading file {}".format(file))
+            body = request_download(get_current_token(), jobid, file)
+            
+            if body.strip(): # skip empty files
+               fname = fnames.get(file, file)
+               debug("  %s -> %s" % (file, fname))
+               path = os.path.join(dir, fname)
+
+#              if os.path.isfile(path):
+#                 response = input("Overwrite %s? [Y/n] " % path)
+#                 if (response == 'n' or response == 'N'):
+#                    while os.path.isfile("%s_%s".format(path,k)):
+#                       ++k;
+#                    path += "_"+str(k)
+
+               print("Downloading " + path)
+
+               with open(path, 'w') as text_file:
+                    text_file.write(body)        
+
+
+def clear(args):
+    jobs = matching_jobs(args)
+
+    for jobid in jobs:
+        status = request_status(get_current_token(), jobid)
+        if (status == "DONE"):
+           print("Removing completed job id: %s" % jobid)
+           remove_job(jobid)
+ 
+
+
+def get(args):
+    jobs = matching_jobs(args)
+    if (len(jobs) == 0):
+       raise QCloudError("No jobs matched") 
+    elif (len(jobs) == 1):
+       download(jobs)
+    else:
+        print("String matches multiple jobs:")
+        for jobid in jobs:
+            print(relpath(jobid))
+
+
+
+def get_all(args):
+    jobs = matching_jobs(args)
+    if (len(jobs) == 0):
+       raise QCloudError("No jobs matched") 
+    download(jobs)
+
+
+
+def submit(args):
+    if (len(args) == 0): 
+       help("Too few arguments passed to submit option")
+
+    for qcin in args:
+        with open(qcin) as f:
+             input = f.readlines()
+
+        jid = request_submit(get_current_token(), input)
+        debug("jobid %s" % jid)
+        if (jid):
+           print("QChem job " + qcin + " submitted")
+           path = os.path.join(os.getcwd(), qcin)
+           add_job(jid, path)
+        else:
+           print("QChem batch job " + qcin + " failed to submit")
+
+
+
+def batch(args):
+    debug("Entering batch subroutine")
+    if (len(args) < 2):
+       help("Too few arguments passed to batch option")
+
+    slurm_file_name = args[0]  
+    slurm = ["$slurm\n"]
+
+    with open(slurm_file_name) as f:
+         debug("opening SLURM batch file: %s" % slurm_file_name)
+         slurm.extend(f.readlines())
+
+    iter_qcin = iter(args)
+    next(iter_qcin)
+
+    for qcin in iter_qcin:
+        input = slurm
+        input.append("#SBATCH --job-name="+qcin+"\n$end\n\n")
+        
+        with open(qcin) as f:
+             debug("opening input file: %s" % qcin)
+             input.extend(f.readlines())
+             
+        jid = request_submit(get_current_token(), input)
+
+        debug("jobid %s" % jid)
+        if (jid):
+           print("QChem batch job " + qcin + " submitted")
+           path = os.path.join(os.getcwd(), qcin)
+           add_job(jid, path)
+        else:
+           print("QChem batch job " + qcin + " failed to submit")
+
+      
+
+if __name__ == '__main__':
+
+    handlers = { 'status'  : status, 
+                 'batch'   : batch,
+                 'submit'  : submit,
+                 'sub'     : submit,
+                 'run'     : submit,
+                 'get'     : get,
+                 'clear'   : clear,
+                 'delete'  : delete,
+                 'del'     : delete,
+                 'getall'  : get_all,
+                 'adduser' : adduser,
+                 'help'    : help }
+
+    if (len(sys.argv) > 2 and sys.argv[1] == "-d"):
+       DEBUG = 1
+       sys.argv.pop(1)
+
+    if (len(sys.argv) < 2): help("Must specify sub option.")
+    debug("Sub-option %s called" % sys.argv[1])
+       
+    func = handlers.get(sys.argv[1], help)
+    del sys.argv[0:2] # remove program and command
+
+    try:
+
+       try:
+          func(sys.argv)
+       except InvalidToken:
+          request_new_token()
+          func(sys.argv)
+
+    except KeyboardInterrupt:
+       sys.exit(1)
+
+    except ConnectionRefusedError as e:
+       print("Connection refused")
+       
+    except IOError as e:
+       if (e.filename is not None):
+          print("File not found: " +  e.filename)
+
+    except urllib.error.HTTPError as e:
+       print("Request failed: " + e.reason)
+
+    except urllib.error.URLError as e:
+       print("Request failed: " + e.reason)
+
+    except (QcloudError, Exception) as e:
+       print(str(e))

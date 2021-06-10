@@ -1,0 +1,89 @@
+version: "2.3"
+
+services:
+   redis:
+      image: redis
+      hostname: redis
+      container_name: redis
+      ports:
+         - "6379:6379"
+      networks:
+         - qcnet
+
+
+   rabbitmq:
+      image: rabbitmq
+      hostname: rabbitmq
+      container_name: rabbitmq
+      ports:
+         - "5672:5672"
+         - "15672:15672"
+      networks:
+         - qcnet
+
+
+   qcauth:
+      image: qcauth:1.0.0
+      build: qcauth
+      hostname: qcauth
+      container_name: qcauth
+      depends_on:
+         - redis
+      ports:
+         - "8882:8882"
+      networks:
+         - qcnet
+      volumes:
+         - type:    bind
+           source: ./config/qcloud.cfg
+           target: /usr/local/qcloud/qcloud.cfg
+
+
+   monitor:
+      image: qcmon:1.0.0
+      build: qcmon
+      hostname: qcmon
+      container_name: qcmon
+      networks:
+         - qcnet
+      volumes:
+         - "/tmp/qcloud:/tmp/qcloud"
+         - type:    bind
+           source: ./config/qcloud.cfg
+           target: /usr/local/qcloud/qcloud.cfg
+
+
+   qcweb:
+      image: qcweb:1.0.0
+      build: qcweb
+      container_name: qcweb
+      hostname: qcweb
+      command: ["qcweb"]
+      ports:
+         - "8883:8883"
+      depends_on:
+         - "qcauth"
+      networks:
+         - qcnet
+      volumes:
+         - /tmp/qcloud:/tmp/qcloud
+         - /tmp/egress.pipe:/tmp/egress.pipe
+         - /tmp/ingress.pipe:/tmp/ingress.pipe
+         - /usr/local/qcloud/bin/sbatch:/opt/slurm/bin/sbatch
+         - /usr/local/qcloud/bin/squeue:/opt/slurm/bin/squeue
+         - /usr/local/qcloud/bin/scancel:/opt/slurm/bin/scancel
+         - type:    bind
+           source: ./config/qcloud.cfg
+           target: /usr/local/qcloud/qcloud.cfg
+#        - type:    bind
+#          source: ./config/slurm.conf
+#          target: /etc/slurm/slurm.conf
+#        - type:    bind
+#          source: ./config/slurmdbd.conf
+#          target: /etc/slurm/slurmdbd.conf
+
+
+networks:
+   qcnet:
+     driver: bridge
+     name: qcnet

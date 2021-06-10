@@ -1,0 +1,9 @@
+$molecule
+0  1
+he 
+$end
+
+$rem
+   basis sto-3g
+   method hf
+$end

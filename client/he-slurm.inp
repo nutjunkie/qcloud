@@ -1,0 +1,15 @@
+$slurm
+#SBATCH --mem=2mb
+#SBATCH --time=0:05:00
+#SBATCH --job-name=he-slurmtest.inp
+$end
+
+$molecule
+0  1
+he 
+$end
+
+$rem
+   basis sto-3g
+   method hf
+$end

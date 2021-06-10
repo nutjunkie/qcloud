@@ -1,0 +1,26 @@
+#!/bin/bash
+
+if [ "$#" -ne 2 ]; then
+    echo "Illegal number of parameters"
+    exit -1
+fi
+
+INPUT=$1
+OUTPUT=$2
+#DELAY=$3
+DELAY=1
+
+if [ ! -f "$INPUT" ]; then
+    echo "Input file does not exist"
+    exit -1
+fi
+
+sleep $DELAY
+
+echo "Below is Q-Chem output:" > $OUTPUT
+echo "" >> $OUTPUT
+cat $INPUT >> $OUTPUT
+
+echo "This is a checkpoint file" > fchk
+
+exit 0

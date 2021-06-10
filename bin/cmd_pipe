@@ -1,0 +1,14 @@
+#! /bin/bash
+
+#
+# Wrapper script for running commands through named pipes via
+# piped.  The piped script must be running for this to work.
+
+# Pipe names are from the commander's (Docker container's) POV.
+#
+
+egress=/tmp/egress.pipe
+ingress=/tmp/ingress.pipe
+
+echo "$@" > $egress
+cat $ingress
