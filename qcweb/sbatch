@@ -1,4 +1,0 @@
-#! /usr/bin/bash
-
-echo "cd $1 && sbatch $2" > /tmp/docker_to_host.pipe
-#need to read from /tmp/host_to_docker

@@ -41,6 +41,7 @@ class UserManager():
         hashpw = hashpw.decode('utf-8')
         self.rdb.hset("user:"+user, 'id', userid) 
         self.rdb.hset("user:"+user, 'pw', hashpw) 
+        logging.info("Setting password hash for user " + user + " to " + hashpw)
         return userid
 
 
@@ -100,7 +101,11 @@ class UserManager():
         else:
            hashpw = bcrypt.hashpw(password.encode('utf-8'), self.salt)
            hashpw = hashpw.decode('utf-8')
-           return (self.user_exists(user) and self.rdb.hget("user:"+user, 'pw') == hashpw)
+
+           if (not self.user_exists(user)):
+              raise Exception("Unknown user: " + user)
+              
+           return (self.rdb.hget("user:"+user, 'pw') == hashpw)
 
 
 

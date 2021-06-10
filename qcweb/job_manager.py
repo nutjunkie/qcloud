@@ -10,6 +10,9 @@ import subprocess
 from local_queue import LocalQueue
 
 slurm_path="/opt/slurm/bin/"
+# These are the slurm user and group on the host machine
+slurm_user=1000
+slurm_group=1000
 
 
 class ComputationalJob():
@@ -78,6 +81,7 @@ class JobManager():
         jobid = uuid.uuid1().hex
         jobdir = self.get_job_workdir(jobid)
         os.mkdir(jobdir)
+        os.chown(jobdir, slurm_user, slurm_group)
 
         match = re.search('--job-name[\s=]+(\S+)',slurm_input)
         if (bool(match)):
@@ -95,13 +99,13 @@ class JobManager():
         fname  = "%s/%s" % (jobdir, batch_fname)
         fh = open(fname, "w")
         fh.write("#!/bin/bash\n")
-        fh.write(slurm_input)
+        fh.write(slurm_input) 
+        fh.write("\n")
+        fh.write("#SBATCH --chdir={0}\n".format(jobdir))
         fh.write("\n")
         fh.write("export QC=/usr/local/qchem\n")
         fh.write("export QCAUX=/usr/local/qcaux\n")
         fh.write("export QCSCRATCH=/tmp/scratch\n")
-        fh.write("export QCSCRATCH=/tmp/scratch\n\n")
-        fh.write("cd {0}\n".format(jobdir))
         fh.write("$QC/bin/qchem {0} {1}\n".format(input_fname,output_fname))
         fh.close()
 

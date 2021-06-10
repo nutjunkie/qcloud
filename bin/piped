@@ -9,6 +9,7 @@
 
 egress=/tmp/egress.pipe
 ingress=/tmp/ingress.pipe
+logfile=/tmp/piped.log
 
 if [ ! -p "$egress" ]; then
    mkfifo $egress
@@ -20,13 +21,20 @@ if [ ! -p "$ingress" ]; then
    chmod 666 $ingress
 fi
 
+if [ -e "$logfile" ]; then
+   rm $logfile
+fi
+
+echo `date "+%Y-%m-%d %H:%M:%S: piped starting"`>> $logfile
+
 while true
 do
    if read cmd < $egress; then
       if [[ "$cmd" == 'quit' ]]; then
-         echo "piped exiting..." > $ingress
+         echo `date "+%Y-%m-%d %H:%M:%S: piped exiting"`>> $logfile
          break
       fi
-      $cmd > $ingress
+      echo `date "+%Y-%m-%d %H:%M:%S: Rerouting command "` $cmd >> $logfile
+      $cmd > $ingress 2>> $logfile
    fi
 done
