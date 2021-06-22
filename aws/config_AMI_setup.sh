@@ -1,13 +1,20 @@
 #! /bin/bash
 
 #
-#  Installs the necessary packages for creating the config AMI.
+#  Installs the necessary packages for creating the temporary configuration
+#  AMI.
 #
-#   - Launch a t2.micro instance with the appropriate alinux2 AMI,
-#     e.g.  ami-0186908e2fdeea8f3
-#     The default settings should suffice.
-#   - Copy this script to the running instance and run it
-#   - Create a new AMI
+#  The base AMI should be the alinux2 image from the appropriate region in the
+#  following list: 
+#
+#    https://github.com/aws/aws-parallelcluster/blob/v2.10.4/amis.txt
+#
+#  The image can be built on a t2.micro instance with default resources.
+#
+#  This file can be downloaded to the launched instance with the command:
+#
+#    wget  https://raw.githubusercontent.com/nutjunkie/qcloud/main/aws/config_AMI_setup.sh
+#    chmod +x config_AMI_setup.sh
 #
 
 pcluster_version="2.10.4"

@@ -8,13 +8,14 @@
 #  The base AMI should be the alinux2 image from the appropriate region in the
 #  following list: 
 #
-#     https://github.com/aws/aws-parallelcluster/blob/v2.10.4/amis.txt
+#    https://github.com/aws/aws-parallelcluster/blob/v2.10.4/amis.txt
 #
 #  The image can be built on a t2.micro instance with default resources.
 #
-#  This file can be downloaded with the command:
+#  This file can be downloaded within the launched instance with the command:
 #
-#    wget  https://raw.githubusercontent.com/nutjunkie/qcloud/main/aws/master_AMI_setup.sh
+#    wget https://raw.githubusercontent.com/nutjunkie/qcloud/main/aws/master_AMI_setup.sh
+#    chmod +x master_AMI_setup.sh
 #
 
 pcluster_version="2.10.4"
