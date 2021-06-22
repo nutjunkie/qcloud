@@ -47,8 +47,9 @@ install_docker_compose()
 install_qcloud()
 {
    echo "Installing QCloud"
-   if [ ! -d /usr/local/qcloud ]; then
-      cd && aws s3 cp --recursive s3://qchem-qcloud/qcloud  qcloud
+   if [ ! -d $prefix/qcloud ]; then
+      cd && git clone https://github.com/nutjunkie/qcloud qcloud
+      #cd && aws s3 cp --recursive s3://qchem-qcloud/qcloud  qcloud
       sudo mv qcloud $prefix
       sudo chmod a+x $prefix/qcloud/bin/* 
    else
@@ -59,23 +60,32 @@ install_qcloud()
 
 install_qchem()
 {
-   echo "Installing Q-Chem"
-   if [ ! -d /usr/local/qchem ]; then
+   if [ ! -d $prefix/qchem ]; then
       echo "Fetching Q-Chem"
       cd && aws s3 cp s3://qchem-private/qchem.tgz .
-      sudo tar xvfz  qchem.tgz -C $prefix
-      rm qchem.tgz
+      if [ -e qchem.tgz ]; then
+         echo "Installing Q-Chem"
+         sudo tar xvfz  qchem.tgz -C $prefix
+         rm qchem.tgz
+      else
+	 echo "Failed to fetch qchem.  Try 'aws configure' to set credentials"
+	 exit 1;
+      fi
    else
       echo "Detected existing qchem installation, skipping."
    fi
 }
 
 
-plumb()
+plumb_pipes()
 {
    echo "Creating pipes"
-   mkfifo $egress
-   mkfifo $ingress
+   if [ ! -p $egress ]; then
+      mkfifo $egress
+   fi
+   if [ ! -p $ingress ]; then
+      mkfifo $ingress
+   fi
 }
 
 
@@ -86,15 +96,37 @@ build_containers()
    cd $prefix/qcloud
    echo "Building qcloud service containers"
    sudo /usr/local/bin/docker-compose build
+   sudo /usr/local/bin/docker-compose pull redis
+   sudo /usr/local/bin/docker-compose pull rabbitmq
 }
 
 
-echo "Building QCloud master AMI"
-pcv=`cat /opt/parallelcluster/.bootstrapped  | cut -d'-' -f 4`
-echo "Installed pcluster version: $pcv"
+print_msg()
+{
+   echo ""
+   echo "Build packages complete."
+   echo "Run the following before shutting down this instance and creating an AMI:"
+   echo "  sudo /usr/local/sbin/ami_cleanup.sh"
+}
+
+
+pcfile="/opt/parallelcluster/.bootstrapped"
+url="https://github.com/aws/aws-parallelcluster/blob/v$pcluster_version/amis.txt"
+
+echo "Building QCloud AMI"
+
+if [ -e $pcfile ]; then
+   pcv=`cat $pcfile | cut -d'-' -f 4`
+   echo "Installed pcluster version: $pcv"
+else
+   echo "File not found: $pcfile"
+   echo "Current instance was not launched using a parallel-cluster AMI"
+   echo "Ensure base AMI is selected from the list at $url"
+   echo "Exiting..."
+   exit
+fi
 
 if [[ $pcv != $pcluster_version ]]; then
-   url="https://github.com/aws/aws-parallelcluster/blob/v$pcluster_version/amis.txt"
    echo "Required pcluster version:  $pcluster_version"
    echo "Ensure base AMI is selected from the list at $url"
    echo "Exiting..."
@@ -103,12 +135,8 @@ fi
 
 install_rpms
 install_docker_compose
-install_qcloud
 install_qchem
-plumb
+install_qcloud
+plumb_pipes
 build_containers
-   
-echo ""
-echo "Build packages complete, run the following before shutting down this"
-echo "instance and creating an AMI:"
-echo "  sudo /usr/local/sbin/ami_cleanup.sh"
+print_msg   
