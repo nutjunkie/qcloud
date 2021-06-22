@@ -1,16 +1,20 @@
 #! /bin/bash
 
 #
-#  Installs the necessary packages and builds the Docker containers for
-#  the main qcloud/qchem AMI.  This AMI is used for both the head node 
-#  and the compute nodes of the cluster.
+#  Installs the necessary packages and builds the Docker containers for the
+#  main qcloud/qchem AMI.  This AMI is used for both the head node and the
+#  compute nodes of the cluster.
 #
-#  The base AMI should be the alinux2 image from the appropriate region 
-#  in the following list: 
+#  The base AMI should be the alinux2 image from the appropriate region in the
+#  following list: 
 #
 #     https://github.com/aws/aws-parallelcluster/blob/v2.10.4/amis.txt
 #
 #  The image can be built on a t2.micro instance with default resources.
+#
+#  This file can be downloaded with the command:
+#
+#    wget  https://raw.githubusercontent.com/nutjunkie/qcloud/main/aws/master_AMI_setup.sh
 #
 
 pcluster_version="2.10.4"
@@ -86,9 +90,9 @@ build_containers()
 
 
 echo "Building QCloud master AMI"
-pcv=`pcluster version`
-
+pcv=`cat /opt/parallelcluster/.bootstrapped  | cut -d'-' -f 4`
 echo "Installed pcluster version: $pcv"
+
 if [[ $pcv != $pcluster_version ]]; then
    url="https://github.com/aws/aws-parallelcluster/blob/v$pcluster_version/amis.txt"
    echo "Required pcluster version:  $pcluster_version"
