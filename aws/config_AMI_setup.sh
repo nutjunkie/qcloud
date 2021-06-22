@@ -10,7 +10,7 @@
 #   - Create a new AMI
 #
 
-pcluster_version="2.10.3"
+pcluster_version="2.10.4"
 
 install_aws_cli() 
 {

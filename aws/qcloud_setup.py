@@ -325,7 +325,7 @@ def configure_pcluster(args):
     config.set(section_name, "ebs_settings", label)
 
     # This is out of date
-    ap_southeast_2 = "ami-01a81885f63dbcd0f"  # Custom AMI with qcloud and qchem installed
+    ap_southeast_2 = "ami-00ad2f9bbf3d36722"  # Custom AMI with qcloud and qchem installed
 
     config.set(section_name, "custom_ami", ap_southeast_2)
     config.set(section_name, "post_install",
