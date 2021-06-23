@@ -1,8 +1,8 @@
 #! /bin/bash
 
 #
-#  Installs the necessary packages for creating the temporary configuration
-#  AMI.
+#  Installs the necessary packages for creating the qcloud configuration
+#  AMI.  This AMI can be deleted once the cluster has been configured.
 #
 #  The base AMI should be the alinux2 image from the appropriate region in the
 #  following list: 
@@ -13,7 +13,7 @@
 #
 #  This file can be downloaded to the launched instance with the command:
 #
-#    wget  https://raw.githubusercontent.com/nutjunkie/qcloud/main/aws/config_AMI_setup.sh
+#    wget https://raw.githubusercontent.com/nutjunkie/qcloud/main/aws/config_AMI_setup.sh
 #    chmod +x config_AMI_setup.sh
 #
 
@@ -49,10 +49,10 @@ install_aws_parallelcluster()
 install_packages()
 {
    if command -v apt &>/dev/null; then
-      sudo apt-get -y update && \
+      #sudo apt-get -y update && \
       sudo apt-get -y install curl unzip  python3 python3-pip
    elif command -v yum &>/dev/null; then
-      sudo yum -y update && \
+      #sudo yum -y update && \
       sudo yum -y install curl unzip  python3 python3-pip
    fi
 }
@@ -73,7 +73,7 @@ verify_aws_parallelcluster()
 {
    if command -v pcluster  &> /dev/null; then
       pc=$(pcluster version)
-      if [[ $pc == 2* ]]; then return 0; fi
+      if [[ $pc == $pcluster_version ]]; then return 0; fi
    fi
 
    install_aws_parallelcluster
@@ -91,6 +91,7 @@ verify_aws_cli
 verify_aws_parallelcluster 
 #install_remi
 
-aws configure
-aws s3 cp s3://qchem-qcloud/qcloud/aws/qcloud_setup.py .
+#aws configure
+#aws s3 cp s3://qchem-qcloud/qcloud/aws/qcloud_setup.py .
+curl https://raw.githubusercontent.com/nutjunkie/qcloud/main/aws/qcloud_setup.py -o qcloud_setup.py
 chmod a+x qcloud_setup.py
