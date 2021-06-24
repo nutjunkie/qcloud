@@ -1,5 +1,5 @@
 $slurm
-#SBATCH --mem=2mb
+#SBATCH --mem=1mb
 #SBATCH --time=0:05:00
 #SBATCH --job-name=he-slurmtest.inp
 $end

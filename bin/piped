@@ -7,9 +7,9 @@
 #  Naming is from the point of view of the commander
 #
 
-egress=/tmp/egress.pipe
-ingress=/tmp/ingress.pipe
-logfile=/tmp/piped.log
+egress=/opt/qcloud/egress.pipe
+ingress=/opt/qcloud/ingress.pipe
+logfile=/opt/qcloud/piped.log
 
 if [ ! -p "$egress" ]; then
    mkfifo $egress

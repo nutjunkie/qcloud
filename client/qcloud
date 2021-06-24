@@ -1,56 +1,21 @@
-#! /usr/local/bin/python3.6
+#!/usr/bin/env python3
 
 import re
 import os
 import sys
+import socket
 import getpass
 import pathlib
 import configparser
 import urllib.parse
 import urllib.request
 
-DEBUG = 0
+from contextlib import closing
 
-def debug(msg):
-    if (DEBUG):
-       print("DEBUG: %s" % msg)
+DEBUG  = 0
+CONFIG = 0
 
-
-config_locations = [ os.path.join(pathlib.Path.home(), ".qcloud_client.cfg"),
-                     'qcloud_client.cfg',
-                     '.qcloud_client.cfg' ]
-  
-config_file = None
-
-for loc in config_locations:
-    if (os.path.isfile(loc)):
-       config_file = loc
-       break
-
-if (config_file is None):
-   print("Unable to find config file")
-   exit(1)
-
-
-debug('Using config file {}'.format(config_file))
-
-config = configparser.ConfigParser()
-config.read(config_file)
-
-AUTH_HOST  = "http://" + config.get("qcloud", "authorisation_host") 
-AUTH_HOST += ":"       + config.get("qcloud", "authorisation_port")
-COMP_HOST  = "http://" + config.get("qcloud", "computation_host") 
-COMP_HOST += ":"       + config.get("qcloud", "computation_port")
-
-
-class QcloudError(Exception):
-    pass
-
-
-
-class InvalidToken(Exception):
-    pass
-
+CONFIG_FILE = 0
 
 
 def help(arg):
@@ -64,11 +29,122 @@ def help(arg):
     qcloud getall  [pattern]
     qcloud clear   [pattern]
     qcloud status  [qcinput/pattern]
-    qcloud adduser [username]""")
+    qcloud adduser [username]
+    qcloud addhost [hostname]""")
     exit(0)
 
 
 
+class QcloudError(Exception):
+    pass
+
+
+
+class InvalidToken(Exception):
+    pass
+
+
+
+def debug(msg):
+    if (DEBUG):
+       print("DEBUG: %s" % msg)
+
+
+
+def config_file_path():
+    config_file = os.path.join(pathlib.Path.home(), ".qcloud_client.cfg")
+    return config_file
+
+
+
+def load_config(config_file):
+    debug('Using config file {}'.format(config_file))
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    return config
+
+
+
+def update_config(section, key, value):
+    if (section not in CONFIG): 
+       CONFIG.add_section(section)
+    CONFIG.set(section, key, value)
+
+    
+
+def write_config_file(config_file):
+    if (not config_file): 
+       raise QcloudError("Config file not set")
+    with open(CONFIG_FILE, 'w') as cfg:
+       CONFIG.write(cfg)
+
+
+
+def test_socket(host, port):
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+        sock.settimeout(2) 
+        if sock.connect_ex((host, port)) == 0:
+           debug("Port {0}:{1} is open".format(host,port))
+           return True
+    debug("Port {0}:{1} is closed".format(host,port))
+    return False
+
+
+
+def addhost(dummy):
+    comp_host = None
+    while (not comp_host):
+       comp_host = input("QCloud host: ").strip()
+    comp_port = input("QCloud port [{0}]: ".format(8883)).strip()
+
+    if (not comp_port): 
+       comp_port = 8883
+    if (not test_socket(comp_host, comp_port)): 
+       raise QcloudError("Host unreachable")
+
+    auth_host = input("Authorisation host [{0}]: ".format(comp_host)).strip()
+    if (not auth_host): 
+       auth_host = comp_host
+       
+    auth_port = input("Authorisation port [{0}]: ".format(8882)).strip()
+    if (not auth_port): 
+       auth_port = 8882
+    if (not test_socket(auth_host, auth_port)): 
+       raise QcloudError("Host unreachable")
+
+    debug("Computational host: {0}".format(comp_host))
+    debug("Computational port: {0}".format(comp_port))
+    debug("Authorisation host: {0}".format(auth_host))
+    debug("Authorisation port: {0}".format(auth_port))
+
+    update_config("host", "computational_host", comp_host)
+    update_config("host", "computational_port", str(comp_port))
+    update_config("host", "authorisation_host", auth_host)
+    update_config("host", "authorisation_port", str(auth_port))
+    update_config("host", "admin_account", "root")
+    write_config_file(CONFIG_FILE)
+
+
+
+def check_config():
+    if ("host" not in CONFIG):
+       raise QcloudError("Use 'qcloud addhost' to set host machine")
+    if ("user" not in CONFIG):
+       raise QcloudError("Use 'qcloud adduser' to set user name")
+    
+
+
+def comp_host():
+    host  = "http://" + CONFIG.get("host", "computational_host") 
+    host += ":"       + CONFIG.get("host", "computational_port")
+    return host;
+
+
+def auth_host():
+    host  = "http://" + CONFIG.get("host", "authorisation_host") 
+    host += ":"       + CONFIG.get("host", "authorisation_port")
+    return host;
+ 
 
 
 def username_is_valid(uname):
@@ -96,7 +172,7 @@ def check_response_status(response):
 
 
 def request_token(username, password):
-    req = urllib.request.Request(AUTH_HOST + "/token")
+    req = urllib.request.Request(auth_host() + "/token")
     req.add_header('Qcloud-Client-User', username)
     req.add_header('Qcloud-Client-Password', password)
 
@@ -108,7 +184,7 @@ def request_token(username, password):
 
 
 def request_adduser(username, password, authorisation):
-    req = urllib.request.Request(AUTH_HOST + "/adduser")
+    req = urllib.request.Request(auth_host() + "/adduser")
     req.add_header('Qcloud-Client-User', username)
     req.add_header('Qcloud-Client-Password', password)
     req.add_header('Qcloud-Client-Authorisation', authorisation)
@@ -123,7 +199,7 @@ def request_adduser(username, password, authorisation):
 def request_submit(token, input):
     debug("Entering request_submit subroutine")
     cookie = urllib.parse.urlencode({'cookie' : token })
-    url = COMP_HOST + "/submit?" + cookie
+    url = comp_host() + "/submit?" + cookie
     data = ''.join(input)
     data = data.encode('ascii')
     debug("  data: %s" % data)
@@ -141,13 +217,13 @@ def request_submit(token, input):
 
 
 def request_new_token():
-    if ("user" not in config):
+    if ("user" not in CONFIG):
        raise QcloudError("Use 'qcloud adduser' to set user name")
-    username = config.get("user", "name")
+    username = CONFIG.get("user", "name")
     prompt = "Password for " + username + ": "
     password = getpass.getpass(prompt)
 
-    req = urllib.request.Request(AUTH_HOST + "/token")
+    req = urllib.request.Request(auth_host() + "/token")
     req.add_header('Qcloud-Client-User', username)
     req.add_header('Qcloud-Client-Password', password)
 
@@ -156,9 +232,9 @@ def request_new_token():
        raise QcloudError("Unable to obtain new token") 
 
     token = res.headers.get("Qcloud-Token")
-    config.set("user", "token", token)
-    with open(config_file, 'w') as cfg:
-         config.write(cfg)
+    CONFIG.set("user", "token", token)
+    with open(CONFIG_FILE, 'w') as cfg:
+         CONFIG.write(cfg)
     return token
 
 
@@ -166,7 +242,7 @@ def request_new_token():
 def request_status(token, jobid):
     data = urllib.parse.urlencode({'cookie' : token, 'jobid' : jobid })
     data = data.encode('ascii')
-    req  = urllib.request.Request(COMP_HOST + "/status", data)
+    req  = urllib.request.Request(comp_host() + "/status", data)
     res  = urllib.request.urlopen(req)
 
     if (check_response_status(res)):
@@ -178,7 +254,7 @@ def request_status(token, jobid):
 def request_delete(token, jobid):
     data = urllib.parse.urlencode({'cookie' : token, 'jobid' : jobid })
     data = data.encode('ascii')
-    req  = urllib.request.Request(COMP_HOST + "/delete", data)
+    req  = urllib.request.Request(comp_host() + "/delete", data)
     res  = urllib.request.urlopen(req)
 
     if (check_response_status(res)):
@@ -190,7 +266,7 @@ def request_delete(token, jobid):
 def request_list(token, jobid):
     data = urllib.parse.urlencode({'cookie' : token, 'jobid' : jobid })
     data = data.encode('ascii')
-    req  = urllib.request.Request(COMP_HOST + "/list", data)
+    req  = urllib.request.Request(comp_host() + "/list", data)
     res  = urllib.request.urlopen(req)
     if (check_response_status(res)):
        files = res.read().decode().split("\n") 
@@ -203,27 +279,29 @@ def request_list(token, jobid):
 def request_download(token, jobid, file):
     data = urllib.parse.urlencode({'cookie' : token, 'jobid' : jobid, 'file' : file })
     data = data.encode('ascii')
-    req  = urllib.request.Request(COMP_HOST + "/download", data)
+    req  = urllib.request.Request(comp_host() + "/download", data)
     res  = urllib.request.urlopen(req)
 
     if (check_response_status(res)):
        return res.read().decode()
 
 
-
 def get_current_token():
-    if ("user" not in config or "token" not in config["user"]):
+    if ("user" not in CONFIG or "token" not in CONFIG["user"]):
          raise QcloudError("Use 'qcloud adduser' to set user name")
-    return config.get("user", "token")
+    return CONFIG.get("user", "token")
 
 
 
 def adduser(args):
-    if ("user" in config and "name" in config["user"]):
-       raise QcloudError("User " + config.get("user", "name") + " exists in " + config_file)
+    if ("host" not in CONFIG or "admin_account" not in CONFIG["host"]):
+       raise QcloudError("Use 'qcloud addhost' to set host machine")
+
+    if ("user" in CONFIG and "name" in CONFIG["user"]):
+       raise QcloudError("User " + CONFIG.get("user", "name") + " exists in " + CONFIG_FILE)
 
     rootpw = getpass.getpass("Qcloud admin password: ")
-    token  = request_token(config.get("qcloud","admin_account"), rootpw)
+    token  = request_token(CONFIG.get("host","admin_account"), rootpw)
     uname  = sys.argv[0] if (len(args) == 1) else input("User name: ")
 
     if (not username_is_valid(uname)):
@@ -247,36 +325,36 @@ def adduser(args):
     token = request_adduser(uname, userpw, rootpw)
 
     if (token):
-       if ("user" not in config):
-          config.add_section("user")
-       config.set("user", "name", uname)
-       config.set("user", "token", token)
-       with open(config_file, 'w') as cfg:
-            config.write(cfg)
-       print("User " + uname + " added successfully")
+       if ("user" not in CONFIG):
+          CONFIG.add_section("user")
+       CONFIG.set("user", "name", uname)
+       CONFIG.set("user", "token", token)
+       with open(CONFIG_FILE, 'w') as cfg:
+            CONFIG.write(cfg)
+       print("User " + uname + " successfully added")
 
 
 
 def add_job(jid, fname):
-    if ("jobs" not in config):
-       config.add_section("jobs")
-    config.set("jobs", jid, fname)
-    with open(config_file, 'w') as cfg:
-         config.write(cfg)
+    if ("jobs" not in CONFIG):
+       CONFIG.add_section("jobs")
+    CONFIG.set("jobs", jid, fname)
+    with open(CONFIG_FILE, 'w') as cfg:
+         CONFIG.write(cfg)
 
 
 def remove_job(jid):
-    del config["jobs"][jid]
-    with open(config_file, 'w') as cfg:
-         config.write(cfg)
+    del CONFIG["jobs"][jid]
+    with open(CONFIG_FILE, 'w') as cfg:
+         CONFIG.write(cfg)
 
 
 
 def matching_jobs(patterns):
-    if ("jobs" not in config):
+    if ("jobs" not in CONFIG):
        raise  QcloudError("No jobs found")
 
-    all_jobs = config["jobs"]
+    all_jobs = CONFIG["jobs"]
     jobs = []
 
     if (len(patterns) == 0):
@@ -292,7 +370,7 @@ def matching_jobs(patterns):
 
 
 def relpath(jobid):
-    job = config.get("jobs", jobid)
+    job = CONFIG.get("jobs", jobid)
     (dir, job) = os.path.split(job)
     dir = os.path.relpath(dir)
     return os.path.join(dir,job)
@@ -462,6 +540,7 @@ if __name__ == '__main__':
                  'del'     : delete,
                  'getall'  : get_all,
                  'adduser' : adduser,
+                 'addhost' : addhost,
                  'help'    : help }
 
     if (len(sys.argv) > 2 and sys.argv[1] == "-d"):
@@ -475,6 +554,11 @@ if __name__ == '__main__':
     del sys.argv[0:2] # remove program and command
 
     try:
+       CONFIG_FILE = config_file_path()
+       CONFIG = load_config(CONFIG_FILE)
+
+       if (not (func == addhost or func == adduser) ):
+          check_config()
 
        try:
           func(sys.argv)

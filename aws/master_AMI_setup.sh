@@ -19,10 +19,9 @@
 #
 
 pcluster_version="2.10.4"
-
-prefix=/usr/local
-egress=/tmp/egress.pipe
-ingress=/tmp/ingress.pipe
+prefix=/opt
+shared=/shared 
+docker_compose=/usr/local/bin/docker-compose
 
 
 install_rpms()
@@ -35,10 +34,10 @@ install_rpms()
 install_docker_compose()
 {
    echo "Installing docker-compose"
-   if ! command -v /usr/local/bin/docker-compose &> /dev/null; then
+   if ! command -v $docker_compose &> /dev/null; then
       echo "Installing docker-compose"
-      sudo curl -L "https://github.com/docker/compose/releases/download/1.28.6/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-      sudo chmod a+x /usr/local/bin/docker-compose 
+      sudo curl -L "https://github.com/docker/compose/releases/download/1.28.6/docker-compose-$(uname -s)-$(uname -m)" -o $docker_compose
+      sudo chmod a+x $docker_compose 
    else
       echo "Detected existing docker-compose installation, skipping."
    fi
@@ -79,22 +78,21 @@ install_qchem()
 
 
 plumb_pipes()
-{
-   echo "Creating pipes"
-   if [ ! -p $egress ]; then
-      mkfifo $egress
-   fi
-   if [ ! -p $ingress ]; then
-      mkfifo $ingress
-   fi
+{ 
+   #sudo mkdir -p $volume 
+   #sudo chmod 777 $volume
 
-   sudo mkdir -p /shared/qcloud
-   sudo chown ec2-user.ec2-user /shared/qcloud
-   chmod +w /shared/qcloud
+   sudo mkdir -p $shared/qcloud
+   sudo chown ec2-user.ec2-user $shared/qcloud
+   sudo chmod 775 $shared/qcloud
 
-   echo "@reboot /usr/local/qcloud/bin/piped" > crontab.txt
+   sudo mkdir -p $prefix/qcloud/redis
+   #sudo chown ec2-user.ec2-user $prefix/qcloud/redis
+   #sudo chmod a+w $prefix/qcloud/redis
+
+   echo "@reboot $prefix/qcloud/bin/piped" > crontab.txt
    echo "@reboot systemctl start docker" >> crontab.txt
-   echo "@reboot cd /usr/local/qcloud && sudo /usr/local/bin/docker-compose up -d" >> crontab.txt
+   echo "@reboot cd $prefix/qcloud && sudo $docker_compose up -d" >> crontab.txt
    sudo crontab crontab.text
    rm crontab.txt
 }
@@ -106,9 +104,9 @@ build_containers()
    sudo systemctl start docker
    cd $prefix/qcloud
    echo "Building qcloud service containers"
-   sudo /usr/local/bin/docker-compose build
-   sudo /usr/local/bin/docker-compose pull redis
-   sudo /usr/local/bin/docker-compose pull rabbitmq
+   sudo $docker_compose build
+   sudo $docker_compose pull redis
+   sudo $docker_compose pull rabbitmq
 }
 
 

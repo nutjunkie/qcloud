@@ -3,12 +3,15 @@ version: "2.3"
 services:
    redis:
       image: redis
+      command: ["redis-server", "--appendonly", "yes"]
       hostname: redis
       container_name: redis
       ports:
          - "6379:6379"
       networks:
          - qcnet
+      volumes:
+         - /opt/qcloud/redis:/data
 
 
    rabbitmq:
@@ -36,7 +39,7 @@ services:
       volumes:
          - type:    bind
            source: ./config/qcloud.cfg
-           target: /usr/local/qcloud/qcloud.cfg
+           target: /opt/qcloud/qcloud.cfg
 
 
    monitor:
@@ -50,7 +53,7 @@ services:
          - /shared/qcloud:/shared/qcloud
          - type:    bind
            source: ./config/qcloud.cfg
-           target: /usr/local/qcloud/qcloud.cfg
+           target: /opt/qcloud/qcloud.cfg
 
 
    qcweb:
@@ -67,14 +70,14 @@ services:
          - qcnet
       volumes:
          - /shared/qcloud:/shared/qcloud
-         - /tmp/egress.pipe:/tmp/egress.pipe
-         - /tmp/ingress.pipe:/tmp/ingress.pipe
-         - /usr/local/qcloud/bin/sbatch:/opt/slurm/bin/sbatch
-         - /usr/local/qcloud/bin/squeue:/opt/slurm/bin/squeue
-         - /usr/local/qcloud/bin/scancel:/opt/slurm/bin/scancel
+         - /opt/qcloud/egress.pipe:/opt/qcloud/egress.pipe
+         - /opt/qcloud/ingress.pipe:/opt/qcloud/ingress.pipe
+         - /opt/qcloud/bin/sbatch:/opt/slurm/bin/sbatch
+         - /opt/qcloud/bin/squeue:/opt/slurm/bin/squeue
+         - /opt/qcloud/bin/scancel:/opt/slurm/bin/scancel
          - type:    bind
            source: ./config/qcloud.cfg
-           target: /usr/local/qcloud/qcloud.cfg
+           target: /opt/qcloud/qcloud.cfg
 
 
 networks:
