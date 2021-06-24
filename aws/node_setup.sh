@@ -12,13 +12,14 @@ logfile=/tmp/node.log
 case "${cfn_node_type}" in
     MasterServer)
         echo "I am the head node" >> $logfile
-        echo "Launching piped" >> $logfile
-        sudo $prefix/qcloud/bin/piped &
-        echo "Launching docker daemon" >> $logfile
-        sudo mkdir /tmp/qcloud
-        sudo systemctl start docker
-        echo "Launching qcloud services" >> $logfile
-        cd $prefix/qcloud && sudo /usr/local/bin/docker-compose  up -d >> $logfile
+        #echo "Launching piped" >> $logfile
+        #sudo nohup $prefix/qcloud/bin/piped &
+        #echo "piped launched" >> $logfile
+        #echo "Launching docker daemon" >> $logfile
+        #sudo mkdir /tmp/qcloud
+        #sudo systemctl start docker
+        #echo "Launching qcloud services" >> $logfile
+        #cd $prefix/qcloud && sudo /usr/local/bin/docker-compose  up -d >> $logfile
     ;;
     ComputeFleet)
         echo "I am a compute node" >> $logfile

@@ -329,7 +329,7 @@ def configure_pcluster(args):
 
     config.set(section_name, "custom_ami", ap_southeast_2)
     config.set(section_name, "post_install",
-       "https://qchem-qcloud.s3-ap-southeast-2.amazonaws.com/qcloud/aws/qcloud_node_setup.sh")
+       "https://qchem-qcloud.s3.ap-southeast-2.amazonaws.com/node_setup.sh")
                       
 
     key_name = config.get(section_name, "key_name")

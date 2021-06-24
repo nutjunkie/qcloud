@@ -91,7 +91,13 @@ verify_aws_cli
 verify_aws_parallelcluster 
 #install_remi
 
-#aws configure
-#aws s3 cp s3://qchem-qcloud/qcloud/aws/qcloud_setup.py .
-curl https://raw.githubusercontent.com/nutjunkie/qcloud/main/aws/qcloud_setup.py -o qcloud_setup.py
+cd && curl https://raw.githubusercontent.com/nutjunkie/qcloud/main/aws/qcloud_setup.py -o qcloud_setup.py
 chmod a+x qcloud_setup.py
+
+echo ""
+echo "Now run the qcloud_setup.py script to configure an AWS access key:"
+echo "./qcloud_setup.py --keygen"
+echo ""
+echo "If you have already performed this step, you can configure a cluster with:"
+echo "./qcloud_setup.py --keygen"
+

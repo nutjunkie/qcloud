@@ -106,8 +106,10 @@ print_msg()
 {
    echo ""
    echo "Build packages complete."
-   echo "Run the following before shutting down this instance and creating an AMI:"
+   echo "Run the following commands before shutting down this instance and creating an AMI:"
+   echo "  sudo crontab -e"
    echo "  sudo /usr/local/sbin/ami_cleanup.sh"
+   echo "  rm master_AMI_setup.sh"
 }
 
 
