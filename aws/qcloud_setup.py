@@ -327,9 +327,6 @@ def configure_pcluster(args):
     ap_southeast_2 = "ami-0eae6ddec59ad4d85"  # Custom AMI with qcloud and qchem installed
     config.set(section_name, "custom_ami", ap_southeast_2)
 
-    #config.set(section_name, "post_install",
-    #   "https://qchem-qcloud.s3.ap-southeast-2.amazonaws.com/node_setup.sh")
-
     key_name = config.get(section_name, "key_name")
     if not key_name:
        key_name = prompt_iterable("EC2 Key Pair Name", get_aws_keys())
