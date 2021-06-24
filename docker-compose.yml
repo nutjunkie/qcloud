@@ -75,12 +75,6 @@ services:
          - type:    bind
            source: ./config/qcloud.cfg
            target: /usr/local/qcloud/qcloud.cfg
-#        - type:    bind
-#          source: ./config/slurm.conf
-#          target: /etc/slurm/slurm.conf
-#        - type:    bind
-#          source: ./config/slurmdbd.conf
-#          target: /etc/slurm/slurmdbd.conf
 
 
 networks:

@@ -324,27 +324,19 @@ def configure_pcluster(args):
     config.set(section_name, "vpc_settings", label)
     config.set(section_name, "ebs_settings", label)
 
-    # This is out of date
-    ap_southeast_2 = "ami-00ad2f9bbf3d36722"  # Custom AMI with qcloud and qchem installed
-
+    ap_southeast_2 = "ami-0eae6ddec59ad4d85"  # Custom AMI with qcloud and qchem installed
     config.set(section_name, "custom_ami", ap_southeast_2)
-    config.set(section_name, "post_install",
-       "https://qchem-qcloud.s3.ap-southeast-2.amazonaws.com/node_setup.sh")
-                      
+
+    #config.set(section_name, "post_install",
+    #   "https://qchem-qcloud.s3.ap-southeast-2.amazonaws.com/node_setup.sh")
 
     key_name = config.get(section_name, "key_name")
     if not key_name:
        key_name = prompt_iterable("EC2 Key Pair Name", get_aws_keys())
        config.set(section_name, "key_name", key_name)
 
-    # TODO this choice should be removed from the user 
-    # as it requires generating an AMI for each OS
+    # The user cannot change this as it requires generating an AMI for each OS
     base_os = "alinux2"
-    #base_os = config.get(section_name, "base_os")
-    #if not base_os:
-    #   base_os = prompt_iterable("Operating System",
-    #       get_supported_os_for_scheduler(scheduler))
-    #   config.set(section_name, "base_os", base_os)
     config.set(section_name, "base_os", base_os)
 
     master_instance_type = config.get(section_name, "master_instance_type")

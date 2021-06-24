@@ -87,6 +87,16 @@ plumb_pipes()
    if [ ! -p $ingress ]; then
       mkfifo $ingress
    fi
+
+   sudo mkdir -p /shared/qcloud
+   sudo chown ec2-user.ec2-user /shared/qcloud
+   chmod +w /shared/qcloud
+
+   echo "@reboot /usr/local/qcloud/bin/piped" > crontab.txt
+   echo "@reboot systemctl start docker" >> crontab.txt
+   echo "@reboot cd /usr/local/qcloud && sudo /usr/local/bin/docker-compose up -d" >> crontab.txt
+   sudo crontab crontab.text
+   rm crontab.txt
 }
 
 
@@ -107,7 +117,6 @@ print_msg()
    echo ""
    echo "Build packages complete."
    echo "Run the following commands before shutting down this instance and creating an AMI:"
-   echo "  sudo crontab -e"
    echo "  sudo /usr/local/sbin/ami_cleanup.sh"
    echo "  rm master_AMI_setup.sh"
 }
