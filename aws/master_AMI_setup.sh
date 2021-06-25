@@ -9,6 +9,8 @@
 #  following list: 
 #
 #    https://github.com/aws/aws-parallelcluster/blob/v2.10.4/amis.txt
+#      alinux2:
+#        ap-southeast-2: ami-0aed9829b5a29d091
 #
 #  The image can be built on a t2.micro instance with default resources.
 #
@@ -117,6 +119,7 @@ print_msg()
    echo "Run the following commands before shutting down this instance and creating an AMI:"
    echo "  sudo /usr/local/sbin/ami_cleanup.sh"
    echo "  rm master_AMI_setup.sh"
+   echo "  rm -fr ~/.aws ~/.ssh"
 }
 
 

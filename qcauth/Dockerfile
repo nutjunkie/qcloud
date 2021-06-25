@@ -7,8 +7,8 @@ RUN apt-get update -yqq && \
     pip3 install bcrypt && \
     pip3 install -Iv pyjwt==1.7.1
 
-COPY authentication_server.py /usr/local/qcloud/qcauth/authentication_server.py
-COPY user_manager.py /usr/local/qcloud/qcauth/user_manager.py
-COPY certs /usr/local/qcloud/qcauth/certs
+COPY authentication_server.py /opt/qcloud/qcauth/authentication_server.py
+COPY user_manager.py /opt/qcloud/qcauth/user_manager.py
+COPY certs /opt/qcloud/qcauth/certs
 
-ENTRYPOINT ["python3", "/usr/local/qcloud/qcauth/authentication_server.py", "/usr/local/qcloud/qcloud.cfg"]
+ENTRYPOINT ["python3", "/opt/qcloud/qcauth/authentication_server.py", "/opt/qcloud/qcloud.cfg"]

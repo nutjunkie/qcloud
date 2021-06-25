@@ -99,5 +99,5 @@ echo "Now run the qcloud_setup.py script to configure an AWS access key:"
 echo "./qcloud_setup.py --keygen"
 echo ""
 echo "If you have already performed this step, you can configure a cluster with:"
-echo "./qcloud_setup.py --keygen"
+echo "./qcloud_setup.py"
 
