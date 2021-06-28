@@ -7,13 +7,10 @@ RUN apt-get update -yqq && \
     pip3 install kombu && \
     pip3 install tornado
 
-COPY web_server.py /usr/qcloud/qcweb/web_server.py
-COPY job_manager.py /usr/qcloud/qcweb/job_manager.py
-COPY local_queue.py /usr/qcloud/qcweb/local_queue.py
-COPY certs /usr/qcloud/qcweb/certs
-
-RUN mkfifo /tmp/egress.pipe  && \
-    mkfifo /tmp/ingress.pipe
+COPY web_server.py /opt/qcloud/qcweb/web_server.py
+COPY job_manager.py /opt/qcloud/qcweb/job_manager.py
+COPY local_queue.py /opt/qcloud/qcweb/local_queue.py
+COPY certs /opt/qcloud/qcweb/certs
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN  chmod a+x /usr/local/bin/docker-entrypoint.sh
