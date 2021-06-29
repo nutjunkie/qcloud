@@ -13,9 +13,30 @@
       else
 	 value=1000
          if [[ $line == *"c5.large"* ]]; then
-            value=3500
+            value=3704
+            value=3200
          elif [[ $line == *"c5.xlarge"* ]]; then
-            value=7000
+            value=7624
+            value=7100
+         elif [[ $line == *"c5.2xlarge"* ]]; then
+            value=15575
+            value=15000
+         elif [[ $line == *"c5.4xlarge"* ]]; then
+            value=31366
+            value=30800
+         elif [[ $line == *"c5.9xlarge"* ]]; then
+            value=70340
+            value=69800
+         elif [[ $line == *"c5.12xlarge"* ]]; then
+            value=94530
+            value=94000
+         elif [[ $line == *"c5.18xlarge"* ]]; then
+            value=140768
+            value=140200
+         elif [[ $line == *"c5.24xlarge"* ]]; then
+            value=189148
+            value=188600
+
 	 else
             echo "Unrecognised instance type"
 	 fi
