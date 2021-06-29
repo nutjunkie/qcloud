@@ -159,19 +159,20 @@ class JobManager():
               output = subprocess.getoutput(cmd)
               #logging.info("squeue returned: %s" % output)
               tokens = output.lstrip().rstrip().split()
-              status = "DONE"
 
               if (len(tokens) > 4):
                  token = tokens[4]
                  if (token == "R" or token == "CG"):
-                    status = "RUNNING"
-                 elif:
-                    status = "QUEUED"
+                    job.status = "RUNNING"
+                 else:
+                    job.status = "QUEUED"
+              else:
+                 job.status = "DONE"
 
-              self.update_job_status(job.jobid,status)
-              if (status == "DONE"):
+              self.update_job_status(job.jobid,job.status)
+              if (job.status == "DONE"):
                  self.update_job_files(job.jobid)
-Need to update actual job
+        
               
 
     def get_job_file(self, jobid, fname):
