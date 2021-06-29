@@ -442,6 +442,28 @@ def pcluster_start(args):
 
 
 
+def pcluster_delete(args):
+    try:
+       config_file = args.config_file
+       label = args.label
+       print("Deleting VPC cluster {0} with config file {1}".format(label,config_file))
+       print("This will delete all AWS resources accociated with this cluster, including storage.")
+       response = input("Coninue? [y/N]")
+
+       if (response == 'y' or response == 'yes'):
+          cmd = "pcluster delete {0}".format(label);
+          cmd = cmd.split()
+          code = os.spawnvpe(os.P_WAIT, cmd[0], cmd, os.environ)
+          if code == 127:
+             sys.stderr.write('{0}: command not found\n'.format(cmd[0]))
+
+    except:
+       print("Unable to delete cluster:", sys.exc_info()[0])
+       sys.exit(1)
+
+
+
+
 def configure_aws_cli():
     print("Configuring AWS CLI client")
     print("If you have not already done so, you will need to create an access key and")
@@ -524,28 +546,52 @@ if __name__ == "__main__":
    #sys.exit(1)
 
    parser = argparse.ArgumentParser();
-   parser.add_argument("-c", "--config", dest="config_file", default="qcloud.config", 
+   parser.add_argument("-f", "--file", dest="config_file", default="qcloud.config", 
        help="Defines an alternative config file.")
+
    parser.add_argument("-v", "--verbose", dest="verbose", action='store_true',
        help="Increase printout level")
+
    parser.add_argument("-l", "--label", dest="label", default="qcloud",
        help="Name of the cluster")
+
    parser.add_argument("-k", "--keygen", dest="keygen",  action='store_true',
        help="Generate keys")
+
    parser.add_argument("-s", "--start", dest="start",  action='store_true',
        help='Start the cluster')
+
+   parser.add_argument("-s", "--start", dest="start",  action='store_true',
+       help='Start the cluster')
+
+   parser.add_argument("-x", "--delete", dest="delete",  action='store_true',
+       help='Delete the cluster')
+
    parser.add_argument("-i", "--info", dest="info",  action='store_true',
        help='Get information on the cluster')
+
+   parser.add_argument("-c", "--config", dest="config",  action='store_true',
+       help='Configure the cluster')
+
    args, extra_args = parser.parse_known_args()
 
    if args.keygen:
       configure_aws_cli()
       create_account()
+
    elif args.start:
       pcluster_create(args)
       pcluster_start(args)
+
    elif args.info:
       pcluster_info(args)
+
+   elif args.dlete:
+      pcluster_delete(args)
+
+   elif args.config:
+      configure_pcluster(args)
+
    else:
       configure_pcluster(args)
 

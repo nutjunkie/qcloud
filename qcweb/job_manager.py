@@ -52,8 +52,7 @@ class JobManager():
 
         if (bool(match)):
            slurm_input = match.group(1).lstrip().rstrip()
-           qchem_input = match.group(2).lstrip().rstrip()
-           job = self.create_job_slurm(slurm_input, qchem_input)
+           job = self.create_job_slurm(slurm_input, job_input)
         else:
            job = self.create_job(job_input)
            self.queue.emit_job_created(job.jobid)
@@ -166,12 +165,13 @@ class JobManager():
                  token = tokens[4]
                  if (token == "R" or token == "CG"):
                     status = "RUNNING"
-                 elif (token == "PD"):
+                 elif:
                     status = "QUEUED"
 
               self.update_job_status(job.jobid,status)
               if (status == "DONE"):
                  self.update_job_files(job.jobid)
+Need to update actual job
               
 
     def get_job_file(self, jobid, fname):
@@ -186,9 +186,6 @@ class JobManager():
 
     def get_job_workdir(self, jobid):
         return "%s/%s" % (self.workdir, jobid)
-
-
-
 
     def update_job_status(self, jobid, status):
         self.__update_job_descriptor(jobid, [("status", status)])

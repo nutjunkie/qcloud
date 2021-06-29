@@ -30,7 +30,8 @@ def help(arg):
     qcloud clear   [pattern]
     qcloud status  [qcinput/pattern]
     qcloud adduser [username]
-    qcloud addhost [hostname]""")
+    qcloud addhost [hostname]
+    qcloud ping """)
     exit(0)
 
 
@@ -83,7 +84,7 @@ def write_config_file(config_file):
 def test_socket(host, port):
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
         sock.settimeout(2) 
-        if sock.connect_ex((host, port)) == 0:
+        if sock.connect_ex((host, int(port))) == 0:
            debug("Port {0}:{1} is open".format(host,port))
            return True
     debug("Port {0}:{1} is closed".format(host,port))
@@ -123,6 +124,22 @@ def addhost(dummy):
     update_config("host", "authorisation_port", str(auth_port))
     update_config("host", "admin_account", "root")
     write_config_file(CONFIG_FILE)
+
+
+
+def checkhost(dummy):
+    if ("host" not in CONFIG):
+       raise QcloudError("Use 'qcloud addhost' to set host machine")
+
+    host = CONFIG.get("host", "computational_host") 
+    port = CONFIG.get("host", "computational_port")
+    state = "running" if test_socket(host, port) else "*unreachable*";
+    print("Computational  host is {0} on {1}:{2}".format(state,host, port))
+
+    host = CONFIG.get("host", "authorisation_host") 
+    port = CONFIG.get("host", "authorisation_port")
+    state = "running" if test_socket(host, port) else "*unreachable*";
+    print("Authentication host is {0} on {1}:{2}".format(state,host, port))
 
 
 
@@ -211,6 +228,8 @@ def request_submit(token, input):
     jobid = 0
     if (check_response_status(res)):
        jobid = res.headers.get("Qcloud-Server-Jobid")
+       slurmid = res.headers.get("Qcloud-Server-Slurmid")
+       print("SLURM ID: {0}".format(slurmid))
 
     return jobid 
 
@@ -541,6 +560,7 @@ if __name__ == '__main__':
                  'getall'  : get_all,
                  'adduser' : adduser,
                  'addhost' : addhost,
+                 'ping'    : checkhost,
                  'help'    : help }
 
     if (len(sys.argv) > 2 and sys.argv[1] == "-d"):

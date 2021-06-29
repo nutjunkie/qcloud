@@ -95,7 +95,7 @@ plumb_pipes()
    echo "@reboot $prefix/qcloud/bin/piped" > crontab.txt
    echo "@reboot systemctl start docker" >> crontab.txt
    echo "@reboot cd $prefix/qcloud && sudo $docker_compose up -d" >> crontab.txt
-   sudo crontab crontab.text
+   sudo crontab crontab.txt
    rm crontab.txt
 }
 
