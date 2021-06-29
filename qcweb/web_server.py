@@ -82,12 +82,13 @@ class SubmitJob(BaseHandler):
 
             self.set_header("Qcloud-Server-Status", "OK")
             self.set_header("Qcloud-Server-Jobid", job.jobid)
+            self.set_header("Qcloud-Server-Slurmid", job.slurmid)
 
             self.set_header("Qchemserv-Status", "OK")
             self.set_header("Qchemserv-Request", "submit")
             self.set_header("Qchemserv-Jobid", job.jobid)
 
-            logging.info("Job submitted; UID=%s, JID=%s" % (userid, job.jobid))
+            logging.info("Job %s submitted; UID=%s, JID=%s" % (job.slurmid, userid, job.jobid))
 
         except tornado.web.MissingArgumentError as e:
             msg = "Missing argument: " + str(e)

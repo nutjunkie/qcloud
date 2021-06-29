@@ -1,0 +1,28 @@
+#! /bin/bash
+
+   PCLUSTER_DIR="/opt/slurm/etc/pcluster"
+   IFS=$'\n'
+
+   partitions=($(ls $PCLUSTER_DIR/*partition.conf))
+
+   for partition in "${partitions[@]}"
+   do
+      line=$(grep NodeName $partition)
+      if [[ $line == *"RealMemory"* ]]; then
+         echo "Memory set in $partition"
+      else
+	 value=1000
+         if [[ $line == *"c5.large"* ]]; then
+            value=3500
+         elif [[ $line == *"c5.xlarge"* ]]; then
+            value=7000
+	 else
+            echo "Unrecognised instance type"
+	 fi
+
+	 line="$line RealMemory=$value"
+	 sed -i "/NodeName/c$line" $partition
+      fi
+   done
+
+   systemctl restart slurmctld
