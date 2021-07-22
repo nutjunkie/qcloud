@@ -1,7 +1,7 @@
 $slurm
-#SBATCH --mem=2mb
+#SBATCH --mem=20mb
 #SBATCH --time=0:05:00
-#SBATCH --job-name=he-slurmtest.inp
+#SBATCH --job-name=he-slurmtest2.inp
 $end
 
 $molecule

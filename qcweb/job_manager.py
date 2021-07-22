@@ -52,12 +52,12 @@ class JobManager():
 
         if (bool(match)):
            slurm_input = match.group(1).lstrip().rstrip()
-           job = self.create_job_slurm(slurm_input, job_input)
         else:
-           job = self.create_job(job_input)
-           self.queue.emit_job_created(job.jobid)
+           slurm_input = ""
+           #job = self.create_job(job_input)
+           #self.queue.emit_job_created(job.jobid)
 
-        print(job)
+        job = self.create_job_slurm(slurm_input, job_input)
 
         return job
 

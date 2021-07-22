@@ -62,19 +62,39 @@ install_qcloud()
 
 install_qchem()
 {
-   if [ ! -d $prefix/qchem ]; then
-      echo "Fetching Q-Chem"
-      cd && aws s3 cp s3://qchem-private/qchem.tgz .
-      if [ -e qchem.tgz ]; then
-         echo "Installing Q-Chem"
-         sudo tar xvfz  qchem.tgz -C $prefix
-         rm qchem.tgz
-      else
-	 echo "Failed to fetch qchem.  Try 'aws configure' to set credentials"
-	 exit 1;
-      fi
+   if [ -d $prefix/qchem ]; then
+      echo "Detected existing qchem installation $prefix/qchem"
+      return
+   fi
+
+   echo "Fetching Q-Chem"
+   cd && aws s3 cp s3://qchem-private/qchem.tgz .
+   if [ -e qchem.tgz ]; then
+      echo "Installing Q-Chem"
+      sudo tar xfz  qchem.tgz -C $prefix
+      rm qchem.tgz
    else
-      echo "Detected existing qchem installation, skipping."
+	 echo "Failed to fetch qchem.  Try 'aws configure' to set credentials"
+	 exit 1
+   fi
+}
+
+
+install_flexnet()
+{
+   shopt -s nullglob
+   set -- $prefix/flexnet*/
+   [ "$#" -gt 0 ] && echo "Found flexnet installation in $prefix" && return
+
+   echo "Fetching flexnet"
+   cd && aws s3 cp s3://qchem-private/flexnet.tgz .
+   if [ -e flexnet.tgz ]; then
+      echo "Installing flexnet"
+      sudo tar xfz  flexnet.tgz -C $prefix
+      rm flexnet.tgz
+   else
+	 echo "Failed to fetch flexnet.  Try 'aws configure' to set credentials"
+	 exit 1
    fi
 }
 
@@ -93,6 +113,7 @@ plumb_pipes()
    #sudo chmod a+w $prefix/qcloud/redis
 
    echo "@reboot $prefix/qcloud/bin/piped" > crontab.txt
+   echo "@reboot $prefix/qcloud/bin/slurm_resources" >> crontab.txt
    echo "@reboot systemctl start docker" >> crontab.txt
    echo "@reboot cd $prefix/qcloud && sudo $docker_compose up -d" >> crontab.txt
    sudo crontab crontab.txt

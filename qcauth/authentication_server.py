@@ -184,11 +184,12 @@ class ValidateToken(BaseHandler):
         except KeyError as e:
             msg = "Missing header: " + str(e)
             self.set_header("Qcloud-Server-Message", msg)
+            logging.error(msg)
 
         except Exception as e:
             msg = str(e);
-            logging.error(msg)
             self.set_header("Qcloud-Server-Message", msg)
+            logging.error(msg)
 
 
 
