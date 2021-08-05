@@ -3,6 +3,7 @@ import jwt
 import sys
 import ssl
 import string
+import base64
 import random
 import logging
 import datetime
@@ -14,6 +15,11 @@ import tornado.web
 
 import user_manager
 
+
+
+def generate_tornado_cookie()
+    """Generates a cookie used for encryption by tornado"""
+    return base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes)
 
 
 def random_string(len):

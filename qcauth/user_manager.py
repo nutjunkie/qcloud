@@ -15,6 +15,8 @@ class UserManager():
         self.rdb = redis.StrictRedis(host=host, port=port, db=0, 
            charset='utf-8', decode_responses=True)
 
+        # new salt can be generated with:
+        # salt = bcrypt.gensalt()
         salt = bytes(config.get("authentication", "salt").encode())
         #print("salt = ",salt, " ", type(salt))
 
