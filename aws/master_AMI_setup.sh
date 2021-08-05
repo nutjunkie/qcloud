@@ -21,6 +21,7 @@
 #
 
 pcluster_version="2.10.4"
+flexnet_version="11.18.0"
 prefix=/opt
 shared=/shared 
 docker_compose=/usr/local/bin/docker-compose
@@ -87,15 +88,22 @@ install_flexnet()
    [ "$#" -gt 0 ] && echo "Found flexnet installation in $prefix" && return
 
    echo "Fetching flexnet"
-   cd && aws s3 cp s3://qchem-private/flexnet.tgz .
-   if [ -e flexnet.tgz ]; then
-      echo "Installing flexnet"
-      sudo tar xfz  flexnet.tgz -C $prefix
-      rm flexnet.tgz
+   cd && aws s3 cp s3://qchem-private/flexnet-$flexnet_version.tgz .
+   if [ -e flexnet-$flexnet_version.tgz ]; then
+      echo "Installing flexnet $flexnet_version"
+      sudo tar xfz  flexnet-$flexnet_version.tgz -C $prefix
+      $prefix/flexnet-$flexnet_version/publisher/install_fnp.sh
+      rm flexnet-$flexnet_version.tgz
+      sudo cp $prefix/flexnet-$flexnet_version/services/FNPLicensingService.service /etc/systemd/system/
+      sudo cp $prefix/flexnet-$flexnet_version/services/QChemLicensingService.service /etc/systemd/system/
+      sudo systemctl enable FNPLicensingService.service
+      sudo systemctl enable QChemLicensingService.service
    else
 	 echo "Failed to fetch flexnet.  Try 'aws configure' to set credentials"
 	 exit 1
    fi
+   # The following needs to be run on the head instance to get the license info
+   #./lmutil lmhostid -ptype AMZN -iid
 }
 
 
@@ -111,6 +119,7 @@ plumb_pipes()
    sudo mkdir -p $prefix/qcloud/redis
    #sudo chown ec2-user.ec2-user $prefix/qcloud/redis
    #sudo chmod a+w $prefix/qcloud/redis
+   sudo chown ec2-user.ec2-user $prefix/flexnet*
 
    echo "@reboot $prefix/qcloud/bin/piped" > crontab.txt
    echo "@reboot $prefix/qcloud/bin/slurm_resources" >> crontab.txt
@@ -119,6 +128,7 @@ plumb_pipes()
    sudo crontab crontab.txt
    rm crontab.txt
 }
+
 
 
 build_containers()
@@ -171,6 +181,8 @@ install_rpms
 install_docker_compose
 install_qchem
 install_qcloud
+install_flexnet
 plumb_pipes
 build_containers
 print_msg   
+
