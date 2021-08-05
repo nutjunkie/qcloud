@@ -43,6 +43,10 @@ class JobManager():
         self.workdir = config.get("queue", "workdir")
         self.queue = LocalQueue(self.db, self.kombu)
 
+        self.qc = config.get("server", "qc")
+        self.qcaux = config.get("server", "qcaux")
+        self.qcscratch = config.get("server", "qcscratch")
+
     def close_connection(self):
         self.kombu.close()
 
@@ -100,11 +104,10 @@ class JobManager():
         fh.write("#!/bin/bash\n")
         fh.write(slurm_input) 
         fh.write("\n")
-        fh.write("#SBATCH --chdir={0}\n".format(jobdir))
-        fh.write("\n")
-        fh.write("export QC=/opt/qchem\n")
-        fh.write("export QCAUX=/opt/qcaux\n")
-        fh.write("export QCSCRATCH=/tmp/scratch\n")
+        fh.write("#SBATCH --chdir={0}\n\n".format(jobdir))
+        fh.write("export QC={0}\n".format(self.qc))
+        fh.write("export QCAUX={0}\n".format(self.qcaux)
+        fh.write("export QCSCRATCH={0}\n".format(self.qcsratch)
         fh.write("$QC/bin/qchem {0} {1}\n".format(input_fname,output_fname))
         fh.close()
 
