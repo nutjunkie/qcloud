@@ -36,7 +36,6 @@ install_rpms()
 
 install_docker_compose()
 {
-   echo "Installing docker-compose"
    if ! command -v $docker_compose &> /dev/null; then
       echo "Installing docker-compose"
       sudo curl -L "https://github.com/docker/compose/releases/download/1.28.6/docker-compose-$(uname -s)-$(uname -m)" -o $docker_compose
@@ -49,8 +48,8 @@ install_docker_compose()
 
 install_qcloud()
 {
-   echo "Installing QCloud"
    if [ ! -d $prefix/qcloud ]; then
+      echo "Installing QCloud"
       cd && git clone https://github.com/nutjunkie/qcloud qcloud
       #cd && aws s3 cp --recursive s3://qchem-qcloud/qcloud  qcloud
       sudo mv qcloud $prefix
@@ -63,20 +62,21 @@ install_qcloud()
 
 install_qchem()
 {
-   if [ -d $prefix/qchem ]; then
-      echo "Detected existing qchem installation $prefix/qchem"
-      return
-   fi
+   qc=qchem_540
+
+   shopt -s nullglob
+   set -- $prefix/qchem*/
+   [ "$#" -gt 0 ] && echo "Detected existing qchem installation in $prefix" && return
 
    echo "Fetching Q-Chem"
-   cd && aws s3 cp s3://qchem-private/qchem.tgz .
-   if [ -e qchem.tgz ]; then
+   cd && aws s3 cp s3://qchem-private/$qc.tgz .
+   if [ -e $qc.tgz ]; then
       echo "Installing Q-Chem"
-      sudo tar xfz  qchem.tgz -C $prefix
-      rm qchem.tgz
-   else
-	 echo "Failed to fetch qchem.  Try 'aws configure' to set credentials"
-	 exit 1
+      sudo tar xfz  $qc.tgz -C $prefix
+      rm $qc.tgz
+   else  
+         echo "Failed to fetch qchem.  Try 'aws configure' to set credentials"
+         exit 1
    fi
 }
 
@@ -92,18 +92,20 @@ install_flexnet()
    if [ -e flexnet-$flexnet_version.tgz ]; then
       echo "Installing flexnet $flexnet_version"
       sudo tar xfz  flexnet-$flexnet_version.tgz -C $prefix
-      $prefix/flexnet-$flexnet_version/publisher/install_fnp.sh
       rm flexnet-$flexnet_version.tgz
-      sudo cp $prefix/flexnet-$flexnet_version/services/FNPLicensingService.service /etc/systemd/system/
-      sudo cp $prefix/flexnet-$flexnet_version/services/QChemLicensingService.service /etc/systemd/system/
-      sudo systemctl enable FNPLicensingService.service
-      sudo systemctl enable QChemLicensingService.service
+
+      sudo chown -R ec2-user.ec2-user $prefix/flexnet-$flexnet_version
+      cd /$prefix/flexnet-$flexnet_version/publisher
+      sudo ./install_fnp.sh
+      cd /$prefix/flexnet-$flexnet_version/services
+      sudo cp FNPLicensingService.service /etc/systemd/system/
+      sudo cp QChemLicensingService.service /etc/systemd/system/
+      sudo systemctl enable /etc/systemd/system/FNPLicensingService.service
+      sudo systemctl enable /etc/systemd/system/QChemLicensingService.service
    else
 	 echo "Failed to fetch flexnet.  Try 'aws configure' to set credentials"
 	 exit 1
    fi
-   # The following needs to be run on the head instance to get the license info
-   #./lmutil lmhostid -ptype AMZN -iid
 }
 
 
@@ -119,7 +121,6 @@ plumb_pipes()
    sudo mkdir -p $prefix/qcloud/redis
    #sudo chown ec2-user.ec2-user $prefix/qcloud/redis
    #sudo chmod a+w $prefix/qcloud/redis
-   sudo chown ec2-user.ec2-user $prefix/flexnet*
 
    echo "@reboot $prefix/qcloud/bin/piped" > crontab.txt
    echo "@reboot $prefix/qcloud/bin/slurm_resources" >> crontab.txt
@@ -161,7 +162,7 @@ echo "Building QCloud AMI"
 
 if [ -e $pcfile ]; then
    pcv=`cat $pcfile | cut -d'-' -f 4`
-   echo "Installed pcluster version: $pcv"
+   echo "pcluster version: $pcv"
 else
    echo "File not found: $pcfile"
    echo "Current instance was not launched using a parallel-cluster AMI"
@@ -177,6 +178,7 @@ if [[ $pcv != $pcluster_version ]]; then
    exit
 fi
 
+aws configure
 install_rpms
 install_docker_compose
 install_qchem

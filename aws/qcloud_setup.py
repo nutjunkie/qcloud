@@ -179,7 +179,15 @@ def create_security_group(label, vpc_id):
                {'IpProtocol': 'tcp',
                 'FromPort': 8882,
                 'ToPort': 8882,
-                'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'qcauth'}]}
+                'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'qcauth'}]},
+               {'IpProtocol': 'tcp',
+                'FromPort': 55555,
+                'ToPort': 55555,
+                'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'flexnet'}]},
+               {'IpProtocol': 'tcp',
+                'FromPort': 27000,
+                'ToPort': 27010,
+                'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'flexnet ports'}]}
            ])
 
        #print('Ingress Successfully Set %s' % data)
@@ -435,6 +443,10 @@ def pcluster_start(args):
        code = os.spawnvpe(os.P_WAIT, cmd[0], cmd, os.environ)
        if code == 127:
           sys.stderr.write('{0}: command not found\n'.format(cmd[0]))
+       else:
+          print("Run the following command on the head node to get the license information:\n")
+          print("/opt/flexnet-11.18.0/bin/lmutil lmhostid -ptype AMZN -iid\n");
+
 
     except:
        print("Unable to start cluster:", sys.exc_info()[0])
