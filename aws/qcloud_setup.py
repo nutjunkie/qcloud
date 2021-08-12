@@ -332,7 +332,7 @@ def configure_pcluster(args):
     config.set(section_name, "vpc_settings", label)
     config.set(section_name, "ebs_settings", label)
 
-    ap_southeast_2 = "ami-0c2bc8d4746175599"  # Custom AMI with qcloud9 and qchem installed
+    ap_southeast_2 = "ami-03ab09c385af0dad6"  # Custom AMI with qcloud/qchem/flexnet
     config.set(section_name, "custom_ami", ap_southeast_2)
 
     key_name = config.get(section_name, "key_name")
