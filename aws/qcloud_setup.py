@@ -394,9 +394,13 @@ def configure_pcluster(args):
     if config.parser.has_section(section_name):
        if verbose: print("Found exisiting {0} section".format(section_name))
     else:
-       config.set(section_name, "scaledown_idletime", 5)
+       idle_time = prompt("Maximum idle time for compute nodes",
+          lambda x: str(x).isdigit() and int(x) >= 0, default_value=5)
+       config.set(section_name, "scaledown_idletime", idle_time)
 
     config.write()
+    print("Cluster configuration written to {0})".format(config_file))
+    print("Run './qcloud_setup.py --start' to start the cluster")
 
 
 
@@ -573,9 +577,6 @@ if __name__ == "__main__":
    parser.add_argument("-s", "--start", dest="start",  action='store_true',
        help='Start the cluster')
 
-   parser.add_argument("-s", "--start", dest="start",  action='store_true',
-       help='Start the cluster')
-
    parser.add_argument("-x", "--delete", dest="delete",  action='store_true',
        help='Delete the cluster')
 
@@ -598,7 +599,7 @@ if __name__ == "__main__":
    elif args.info:
       pcluster_info(args)
 
-   elif args.dlete:
+   elif args.delete:
       pcluster_delete(args)
 
    elif args.config:

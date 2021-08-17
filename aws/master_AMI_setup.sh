@@ -11,6 +11,8 @@
 #    https://github.com/aws/aws-parallelcluster/blob/v2.10.4/amis.txt
 #      alinux2:
 #        ap-southeast-2: ami-0aed9829b5a29d091
+#        us-east-1: ami-043bed31bde73d741
+#        us-west-1: ami-0f1328eb1e03d7fb2
 #
 #  The image can be built on a t2.micro instance with default resources.
 #

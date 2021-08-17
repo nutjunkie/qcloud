@@ -577,7 +577,7 @@ if __name__ == '__main__':
        CONFIG_FILE = config_file_path()
        CONFIG = load_config(CONFIG_FILE)
 
-       if (not (func == addhost or func == adduser) ):
+       if (not (func == addhost or func == adduser or func == checkhost) ):
           check_config()
 
        try:
