@@ -8,6 +8,10 @@
 #  following list: 
 #
 #    https://github.com/aws/aws-parallelcluster/blob/v2.10.4/amis.txt
+#      alinux2:
+#        ap-southeast-2: ami-0aed9829b5a29d091
+#        us-east-1: ami-043bed31bde73d741
+#        us-west-1: ami-0f1328eb1e03d7fb2
 #
 #  The image can be built on a t2.micro instance with default resources.
 #
@@ -16,6 +20,14 @@
 #    wget https://raw.githubusercontent.com/nutjunkie/qcloud/main/aws/config_AMI_setup.sh
 #    chmod +x config_AMI_setup.sh
 #
+#    ./config_AMI_setup.sh
+#    rm -fr  ~/.ssh
+#    rm config_AMI_setup.sh
+#    EDIT the qcloud_setup.py script to add the appropriate QCloud AMI
+#    sudo /usr/local/sbin/ami_cleanup.sh
+#
+#  Once the instance has been stopped, an AMI can be created, right click on the instance ID:
+#     Images and templates -> Create image
 
 pcluster_version="2.10.4"
 

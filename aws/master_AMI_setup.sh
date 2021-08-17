@@ -21,6 +21,13 @@
 #    wget https://raw.githubusercontent.com/nutjunkie/qcloud/main/aws/master_AMI_setup.sh
 #    chmod +x master_AMI_setup.sh
 #
+#    ./master_AMI_setup.sh
+#    rm -fr ~/.aws ~/.ssh
+#    rm master_AMI_setup.sh
+#    sudo /usr/local/sbin/ami_cleanup.sh
+#
+#  Once the instance has been stopped, an AMI can be created, right click on the instance ID:
+#     Images and templates -> Create image
 
 pcluster_version="2.10.4"
 flexnet_version="11.18.0"

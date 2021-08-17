@@ -300,7 +300,8 @@ def configure_pcluster(args):
     verbose = args.verbose
 
     # [aws]
-    aws_region_name = config.get("aws", "aws_region_name")
+    # aws_region_name = config.get("aws", "aws_region_name")
+    aws_region_name = "us-east-1"
     if not aws_region_name:
        available_regions = get_regions()
        session = boto3.session.Session()
@@ -310,6 +311,7 @@ def configure_pcluster(args):
        config.set("aws", "aws_region_name", aws_region_name)
        print("Region set to ", aws_region_name)
 
+    config.set("aws", "aws_region_name", aws_region_name)
     os.environ["AWS_DEFAULT_REGION"] = aws_region_name
     
     # [global]
@@ -332,8 +334,8 @@ def configure_pcluster(args):
     config.set(section_name, "vpc_settings", label)
     config.set(section_name, "ebs_settings", label)
 
-    ap_southeast_2 = "ami-03ab09c385af0dad6"  # Custom AMI with qcloud/qchem/flexnet
-    config.set(section_name, "custom_ami", ap_southeast_2)
+    qcloud_ami = "ami-09f661a138c1eb411"  
+    config.set(section_name, "custom_ami", qcloud_ami)
 
     key_name = config.get(section_name, "key_name")
     if not key_name:
@@ -362,6 +364,30 @@ def configure_pcluster(args):
        section_name = "cluster {0}".format(label)
        config.set(section_name, "queue_settings", ", ".join(queues))
 
+    # [ebs]
+    section_name = "ebs {0}".format(label)
+    if config.parser.has_section(section_name):
+       if verbose: print("Found exisiting {0} section".format(section_name))
+    else:
+       config.set(section_name, "shared_dir",  "shared")
+       #config.set(section_name, "volume_type", "st1")
+       config.set(section_name, "volume_type", "gp2")
+       ebs_size = prompt("Shared storage size (Gb)",
+          lambda x: str(x).isdigit() and int(x) >= 0, default_value=10)
+       config.set(section_name, "volume_size", ebs_size)
+
+    # [s3]
+    # TODO
+
+    # [scaling]
+    section_name = "scaling {0}".format(label)
+    if config.parser.has_section(section_name):
+       if verbose: print("Found exisiting {0} section".format(section_name))
+    else:
+       idle_time = prompt("Maximum idle time for compute nodes (mins)",
+          lambda x: str(x).isdigit() and int(x) >= 0, default_value=5)
+       config.set(section_name, "scaledown_idletime", idle_time)
+
     # [vpc]
     section_name = "vpc {0}".format(label)
     if config.parser.has_section(section_name):
@@ -375,31 +401,8 @@ def configure_pcluster(args):
        security_group = create_security_group(label, vpc_parameters['vpc_id'])
        config.set(section_name, "additional_sg", security_group)
 
-    # [ebs]
-    # TODO: need to offer options to the user
-    section_name = "ebs {0}".format(label)
-    if config.parser.has_section(section_name):
-       if verbose: print("Found exisiting {0} section".format(section_name))
-    else:
-       config.set(section_name, "shared_dir",  "shared")
-       #config.set(section_name, "volume_type", "st1")
-       config.set(section_name, "volume_type", "gp2")
-       config.set(section_name, "volume_size", 10)
-
-    # [s3]
-    # TODO
-
-    # [scaling]
-    section_name = "scaling {0}".format(label)
-    if config.parser.has_section(section_name):
-       if verbose: print("Found exisiting {0} section".format(section_name))
-    else:
-       idle_time = prompt("Maximum idle time for compute nodes",
-          lambda x: str(x).isdigit() and int(x) >= 0, default_value=5)
-       config.set(section_name, "scaledown_idletime", idle_time)
-
     config.write()
-    print("Cluster configuration written to {0})".format(config_file))
+    print("Cluster configuration written to {0})".format(args.config_file))
     print("Run './qcloud_setup.py --start' to start the cluster")
 
 
