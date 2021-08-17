@@ -106,8 +106,8 @@ class JobManager():
         fh.write("\n")
         fh.write("#SBATCH --chdir={0}\n\n".format(jobdir))
         fh.write("export QC={0}\n".format(self.qc))
-        fh.write("export QCAUX={0}\n".format(self.qcaux)
-        fh.write("export QCSCRATCH={0}\n".format(self.qcsratch)
+        fh.write("export QCAUX={0}\n".format(self.qcaux))
+        fh.write("export QCSCRATCH={0}\n".format(self.qcscratch))
         fh.write("$QC/bin/qchem {0} {1}\n".format(input_fname,output_fname))
         fh.close()
 

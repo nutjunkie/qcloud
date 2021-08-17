@@ -17,7 +17,7 @@ import user_manager
 
 
 
-def generate_tornado_cookie()
+def generate_tornado_cookie():
     """Generates a cookie used for encryption by tornado"""
     return base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes)
 
