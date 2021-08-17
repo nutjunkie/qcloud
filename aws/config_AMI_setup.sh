@@ -23,7 +23,7 @@
 #    ./config_AMI_setup.sh
 #    rm -fr  ~/.ssh
 #    rm config_AMI_setup.sh
-#    EDIT the qcloud_setup.py script to add the appropriate QCloud AMI
+#    EDIT the qcloud_setup.py script to add the appropriate QCloud AMI and AWS region
 #    sudo /usr/local/sbin/ami_cleanup.sh
 #
 #  Once the instance has been stopped, an AMI can be created, right click on the instance ID:

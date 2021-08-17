@@ -452,7 +452,7 @@ def pcluster_start(args):
           sys.stderr.write('{0}: command not found\n'.format(cmd[0]))
        else:
           print("Run the following command on the head node to get the license information:\n")
-          print("/opt/flexnet-11.18.0/bin/lmutil lmhostid -ptype AMZN -iid\n");
+          print("/opt/flexnet-11.18.0/bin/lmutil lmhostid -ptype AMZN -eip\n");
 
 
     except:
