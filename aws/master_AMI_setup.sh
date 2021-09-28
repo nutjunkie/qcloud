@@ -120,14 +120,10 @@ install_flexnet()
 
 plumb_pipes()
 { 
-   #sudo mkdir -p $shared/qcloud
-   #sudo chown ec2-user.ec2-user $shared/qcloud
-   #sudo chmod 775 $shared/qcloud
-
    sudo mkdir -p $prefix/qcloud/redis
 
    # This needs to be made consistent with what is in the config file.
-   echo "@reboot mkdir -p /shared/qcloud" > crontab.txt
+   echo "@reboot mkdir -p $shared/qcloud" > crontab.txt
    echo "@reboot $prefix/qcloud/bin/piped" > crontab.txt
    echo "@reboot $prefix/qcloud/bin/slurm_resources" >> crontab.txt
    echo "@reboot systemctl start docker" >> crontab.txt

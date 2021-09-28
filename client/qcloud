@@ -92,8 +92,8 @@ def test_socket(host, port):
 
 
 
-def addhost(dummy):
-    comp_host = None
+def addhost(args):
+    comp_host = sys.argv[0] if (len(args) == 1) else None
     while (not comp_host):
        comp_host = input("QCloud host: ").strip()
     comp_port = input("QCloud port [{0}]: ".format(8883)).strip()
@@ -577,7 +577,7 @@ if __name__ == '__main__':
        CONFIG_FILE = config_file_path()
        CONFIG = load_config(CONFIG_FILE)
 
-       if (not (func == addhost or func == adduser or func == checkhost) ):
+       if (not (func == addhost or func == adduser or func == checkhost or func == help) ):
           check_config()
 
        try:

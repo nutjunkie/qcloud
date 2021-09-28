@@ -205,6 +205,7 @@ def create_vpc(config):
     min_subnet_size = int(config.max_cluster_size())
     network_config = choose_network_configuration(node_types)
 
+    # This does not alway succeed vpc gets created, but reports back not founcd
     vpc_parameters.update(automate_vpc_with_subnet_creation(network_config, min_subnet_size))
     if (network_config.template_name == 'public-private'):
        print("WARNING: A NAT gateway has been created and is being charged per hour")
