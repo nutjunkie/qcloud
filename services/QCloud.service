@@ -1,0 +1,14 @@
+[Unit]
+Description=QCloud web and authentication services
+After=networking.target shared-qcloud.mount
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/qcloud
+ExecStart=/usr/local/bin/docker-compose -f /opt/qcloud/docker-compose.yml up
+ExecStop=/usr/local/bin/docker-compose  -f /opt/qcloud/docker-compose.yml down
+
+[Install]
+WantedBy=multi-user.target
