@@ -31,6 +31,7 @@
 
 pcluster_version="2.10.4"
 flexnet_version="11.18.0"
+qchem_version="540"
 prefix=/opt
 shared=/shared 
 docker_compose=/usr/local/bin/docker-compose
@@ -63,6 +64,11 @@ install_qcloud()
       #cd && aws s3 cp --recursive s3://qchem-qcloud/qcloud  qcloud
       sudo mv qcloud $prefix
       sudo chmod a+x $prefix/qcloud/bin/* 
+      cp $prefix/qcloud/aws/install_license.sh $HOME
+
+      sudo rm -fr $prefix/qcloud/.git
+      sudo rm -fr $prefix/qcloud/aws
+      sudo rm -fr $prefix/qcloud/client
    else
       echo "Detected existing qcloud installation, skipping."
    fi
@@ -71,7 +77,7 @@ install_qcloud()
 
 install_qchem()
 {
-   qc=qchem_540
+   qc="qchem_$qchem_version"
 
    shopt -s nullglob
    set -- $prefix/qchem*/
@@ -82,10 +88,11 @@ install_qchem()
    if [ -e $qc.tgz ]; then
       echo "Installing Q-Chem"
       sudo tar xfz  $qc.tgz -C $prefix
+      sudo ln -s $prefix/$qc $prefix/qchem
       rm $qc.tgz
    else  
-         echo "Failed to fetch qchem.  Try 'aws configure' to set credentials"
-         exit 1
+      echo "Failed to fetch qchem.  Try 'aws configure' to set credentials"
+      exit 1
    fi
 }
 
@@ -111,6 +118,7 @@ install_flexnet()
       sudo cp QChemLicensingService.service /etc/systemd/system/
       sudo systemctl enable /etc/systemd/system/FNPLicensingService.service
       sudo systemctl enable /etc/systemd/system/QChemLicensingService.service
+      sudo ln -s $prefix/flexnet-$flexnet_version $prefix/flexnet
    else
 	 echo "Failed to fetch flexnet.  Try 'aws configure' to set credentials"
 	 exit 1
@@ -122,23 +130,10 @@ plumb_pipes()
 { 
    sudo mkdir -p $prefix/qcloud/redis
    sudo mkdir -p $shared/qcloud
-
    sudo systemctl enable docker
    sudo systemctl enable $prefix/qcloud/services/QCloud.service
    sudo systemctl enable $prefix/qcloud/services/piped.service
-
-   #$prefix/qcloud/bin/slurm_resources
-
-   # This needs to be made consistent with what is in the config file.
-   #echo "@reboot $prefix/qcloud/bin/piped" >> crontab.txt
-   #echo "@reboot $prefix/qcloud/bin/slurm_resources" >> crontab.txt
-   #echo "@reboot systemctl start docker" >> crontab.txt
-   #echo "@reboot cd $prefix/qcloud && sudo $docker_compose up -d" >> crontab.txt
-   #echo "@reboot $prefix/qcloud/bin/piped" >> crontab.txt
-   #sudo crontab crontab.txt
-   #rm crontab.txt
 }
-
 
 
 build_containers()
@@ -158,9 +153,9 @@ print_msg()
    echo ""
    echo "Build packages complete."
    echo "Run the following commands before shutting down this instance and creating an AMI:"
+   echo ""
    echo "  sudo /usr/local/sbin/ami_cleanup.sh"
-   echo "  rm master_AMI_setup.sh"
-   echo "  rm -fr ~/.aws ~/.ssh"
+   echo "  rm -fr ~/.aws ~/.ssh master_AMI_setup.sh"
 }
 
 
