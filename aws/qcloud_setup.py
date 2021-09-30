@@ -8,6 +8,7 @@ import sys
 import pathlib
 import argparse
 import configparser
+import subprocess
 
 import botocore
 import boto3
@@ -205,7 +206,6 @@ def create_vpc(config):
     min_subnet_size = int(config.max_cluster_size())
     network_config = choose_network_configuration(node_types)
 
-    # This does not alway succeed vpc gets created, but reports back not founcd
     vpc_parameters.update(automate_vpc_with_subnet_creation(network_config, min_subnet_size))
     if (network_config.template_name == 'public-private'):
        print("WARNING: A NAT gateway has been created and is being charged per hour")
@@ -296,13 +296,25 @@ def prompt_queue_types(config):
     
 
 def configure_pcluster(args):
+    config_file = args.config_file
+    if (os.path.isfile(config_file)):
+       delete = prompt("Delete existing config file {0}? (y/n)".format(config_file),
+          lambda x: x in ("y", "n"), default_value="y") == "y"
+       if (delete):
+          os.remove(config_file)
+       else:
+          print("Settings from {0} will be used".format(config_file))
+
     config  = PClusterConfig(args.config_file, args.label)
     label   = args.label
     verbose = args.verbose
 
     # [aws]
-    # aws_region_name = config.get("aws", "aws_region_name")
-    aws_region_name = "us-east-1"
+    aws_region_name = subprocess.check_output(
+            "aws configure list | grep region | awk '{print $2}'", shell=True, text=True)
+    #aws_region_name = config.get("aws", "aws_region_name")
+    aws_region_name = aws_region_name.strip()
+    print("Current aws_region set to {0}".format(aws_region_name))
     if not aws_region_name:
        available_regions = get_regions()
        session = boto3.session.Session()
@@ -335,7 +347,7 @@ def configure_pcluster(args):
     config.set(section_name, "vpc_settings", label)
     config.set(section_name, "ebs_settings", label)
 
-    qcloud_ami = "ami-09f661a138c1eb411"  
+    qcloud_ami = "ami-007ed1b6ded76cb3c"
     config.set(section_name, "custom_ami", qcloud_ami)
 
     key_name = config.get(section_name, "key_name")
@@ -370,7 +382,7 @@ def configure_pcluster(args):
     if config.parser.has_section(section_name):
        if verbose: print("Found exisiting {0} section".format(section_name))
     else:
-       config.set(section_name, "shared_dir",  "shared")
+       config.set(section_name, "shared_dir",  "shared/qcloud")
        #config.set(section_name, "volume_type", "st1")
        config.set(section_name, "volume_type", "gp2")
        ebs_size = prompt("Shared storage size (Gb)",
@@ -454,7 +466,6 @@ def pcluster_start(args):
        else:
           print("Run the following command on the head node to get the license information:\n")
           print("/opt/flexnet-11.18.0/bin/lmutil lmhostid -ptype AMZN -eip\n");
-
 
     except:
        print("Unable to start cluster:", sys.exc_info()[0])
@@ -548,7 +559,6 @@ def create_account():
           sys.stderr.write('{0}: command not found\n'.format(cmd[0]))
           raise KeyError; 
        # TODO: need to cache profile determined by admin for later use
-       #       env var?
 
     except client.exceptions.EntityAlreadyExistsException:
        print("Using existing user account {0}".format(admin))
@@ -562,9 +572,6 @@ def create_account():
 
 
 if __name__ == "__main__":
-   #create_security_group("qcloud", "vpc-2c8b6a4a")
-   #sys.exit(1)
-
    parser = argparse.ArgumentParser();
    parser.add_argument("-f", "--file", dest="config_file", default="qcloud.config", 
        help="Defines an alternative config file.")
@@ -610,6 +617,7 @@ if __name__ == "__main__":
       configure_pcluster(args)
 
    else:
+      configure_aws_cli()
       configure_pcluster(args)
 
 

@@ -1,0 +1,9 @@
+#! /bin/bash
+
+egress=/opt/qcloud/egress.pipe
+ingress=/opt/qcloud/ingress.pipe
+
+if [ ! -p "$egress" ]; then
+   echo "quit" > $egress
+fi
+rm -f $egress $ingress

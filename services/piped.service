@@ -1,11 +1,11 @@
 [Unit] 
 Description=Enable Pipe communication between Docker containers and the host
-After=network.target shared-qcloud.mount 
 
 [Service] 
-Type=forking 
+Type=simple
 WorkingDirectory=/opt/qcloud/bin
 ExecStart=/opt/qcloud/bin/piped
+ExecStop=/opt/qcloud/bin/piped.stop
 Restart=on-abort 
 
 [Install] 

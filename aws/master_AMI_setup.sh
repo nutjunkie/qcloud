@@ -125,17 +125,19 @@ plumb_pipes()
 
    sudo systemctl enable docker
    sudo systemctl enable $prefix/qcloud/services/QCloud.service
-   sudo systemctl enable $prefix/qcloud/services/piped.service
+   #sudo systemctl enable $prefix/qcloud/services/piped.service
 
-   $prefix/qcloud/bin/slurm_resources
+   #$prefix/qcloud/bin/slurm_resources
 
    # This needs to be made consistent with what is in the config file.
    #echo "@reboot $prefix/qcloud/bin/piped" >> crontab.txt
    #echo "@reboot $prefix/qcloud/bin/slurm_resources" >> crontab.txt
    #echo "@reboot systemctl start docker" >> crontab.txt
    #echo "@reboot cd $prefix/qcloud && sudo $docker_compose up -d" >> crontab.txt
-   #sudo crontab crontab.txt
-   #rm crontab.txt
+
+   echo "@reboot $prefix/qcloud/bin/piped" >> crontab.txt
+   sudo crontab crontab.txt
+   rm crontab.txt
 }
 
 
