@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-import pprint
-
 import os
 import re
 import sys
+import time
+import pprint
 import pathlib
 import argparse
 import configparser
@@ -12,6 +12,8 @@ import subprocess
 
 import botocore
 import boto3
+
+from future.backports import datetime
 
 from pcluster.configure.utils import (
    get_regions,
@@ -21,8 +23,7 @@ from pcluster.configure.utils import (
 
 from pcluster.configure.networking import (
    NetworkConfiguration,
-   PublicPrivateNetworkConfig,
-   automate_vpc_with_subnet_creation,
+   PublicPrivateNetworkConfig
 )
 
 from pcluster.utils import (
@@ -38,6 +39,8 @@ from pcluster.config.validators import (
     HEAD_NODE_UNSUPPORTED_INSTANCE_TYPES, 
     HEAD_NODE_UNSUPPORTED_MESSAGE
 )
+
+from pcluster.networking.vpc_factory import VpcFactory
 
 
 class PClusterConfig:
@@ -167,6 +170,7 @@ def create_security_group(label, vpc_id):
           GroupName = label + "-sg",
           VpcId = vpc_id
        )
+       time.sleep(3)
        #print(response)
        group_id = response['GroupId']
        print("GroupID = ",  group_id)
@@ -200,13 +204,38 @@ def create_security_group(label, vpc_id):
     return group_id
 
 
-def create_vpc(config):
+def automate_vpc_with_subnet_creation(network_configuration, compute_subnet_size, region):
+    print("Beginning VPC creation. Please do not leave the terminal until the creation is finalized")
+    vpc_creator = VpcFactory(region)
+    vpc_id = vpc_creator.create()
+
+    client = boto3.resource("ec2", region)
+    time.sleep(1)
+    vpc = client.Vpc(vpc_id)
+    vpc.wait_until_available()
+
+    time_stamp = "-{:%Y%m%d%H%M%S}".format(datetime.datetime.utcnow())
+    vpc_creator.setup(vpc_id, name="QCloud-VPC" + time_stamp)
+
+    if not vpc_creator.check(vpc_id):
+        logging.critical("Something went wrong in VPC creation. Please delete it and start the process again")
+        sys.exit(1)
+    if not VpcFactory(region).check(vpc_id):
+        logging.error("WARNING: The VPC does not have the correct parameters set.")
+
+    vpc_parameters = {"vpc_id": vpc_id}
+    new_parameters = network_configuration.create(vpc_id, compute_subnet_size)
+    vpc_parameters.update(new_parameters)
+    return vpc_parameters
+
+
+def create_vpc(config, aws_region):
     vpc_parameters = {}
     node_types = config.node_types()
     min_subnet_size = int(config.max_cluster_size())
     network_config = choose_network_configuration(node_types)
+    vpc_parameters.update(automate_vpc_with_subnet_creation(network_config, min_subnet_size, aws_region))
 
-    vpc_parameters.update(automate_vpc_with_subnet_creation(network_config, min_subnet_size))
     if (network_config.template_name == 'public-private'):
        print("WARNING: A NAT gateway has been created and is being charged per hour")
     return vpc_parameters
@@ -326,7 +355,7 @@ def configure_pcluster(args):
 
     config.set("aws", "aws_region_name", aws_region_name)
     os.environ["AWS_DEFAULT_REGION"] = aws_region_name
-    
+
     # [global]
     section_name = "global"
     if config.parser.has_section(section_name):
@@ -347,7 +376,7 @@ def configure_pcluster(args):
     config.set(section_name, "vpc_settings", label)
     config.set(section_name, "ebs_settings", label)
 
-    qcloud_ami = "ami-007ed1b6ded76cb3c"
+    qcloud_ami = "ami-08994798d3214a7fb" 
     config.set(section_name, "custom_ami", qcloud_ami)
 
     key_name = config.get(section_name, "key_name")
@@ -406,7 +435,7 @@ def configure_pcluster(args):
     if config.parser.has_section(section_name):
        if verbose: print("Found exisiting {0} section".format(section_name))
     else:
-       vpc_parameters = create_vpc(config)
+       vpc_parameters = create_vpc(config, aws_region_name)
        for k,v in vpc_parameters.items():
            config.set(section_name, k, v)
        vpc_id =  vpc_parameters['vpc_id']
