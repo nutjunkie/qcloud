@@ -4,11 +4,14 @@ import os
 import re
 import sys
 import time
+import uuid
 import pprint
 import pathlib
 import argparse
 import configparser
 import subprocess
+
+import json
 
 import botocore
 import boto3
@@ -100,6 +103,10 @@ class PClusterConfig:
              self.parser.write(cfg)
 
 
+def printd(dict):
+    print(json.dumps(dict, sort_keys=True, indent=4))
+
+
 def instance_type_supported_for_head_node(instance_type):
     if instance_type in HEAD_NODE_UNSUPPORTED_INSTANCE_TYPES:
         print(HEAD_NODE_UNSUPPORTED_MESSAGE.format(instance_type))
@@ -173,7 +180,7 @@ def create_security_group(label, vpc_id):
        time.sleep(3)
        #print(response)
        group_id = response['GroupId']
-       print("GroupID = ",  group_id)
+       print("GroupID:     {0}".format(group_id))
        data = client.authorize_security_group_ingress(
            GroupId = group_id,
            IpPermissions = [
@@ -239,6 +246,69 @@ def create_vpc(config, aws_region):
     if (network_config.template_name == 'public-private'):
        print("WARNING: A NAT gateway has been created and is being charged per hour")
     return vpc_parameters
+
+
+def create_efs(qcloud_vpc, aws_region, security_group):
+    client  = boto3.client('efs')
+    session = boto3.Session(region_name=aws_region)
+    ec2_resource = session.resource("ec2")
+    ec2_client = session.client("ec2")
+
+    # Obtain the subnet ID associted with the vpc
+    subnet_ids = []
+    for vpc in ec2_resource.vpcs.all():
+        if (vpc.id == qcloud_vpc):
+           for subnet in vpc.subnets.all():
+               subnet_ids.append(subnet.id)
+
+    n = len(subnet_ids)
+    if (n != 1):
+       print("Invalid number of subnets found for VPC {0}: {1}".format(qcloud_vpc,n))
+       if (n > 0):
+          printd(ec2_client.describe_subnets(SubnetIds=subnet_ids))
+       sys.exit(1)
+    
+    subnet = subnet_ids[0]
+
+    token = str(uuid.uuid4())
+    efs_client = session.client("efs")
+    response = efs_client.create_file_system(
+       CreationToken=token,
+       PerformanceMode='generalPurpose',
+       Encrypted=False,
+       Backup=False
+    )
+
+    fs_id = response['FileSystemId']
+    created = (response['LifeCycleState'] == 'available')
+
+    # Wait for the filesytem to come online
+    count = 0
+    while (not created and count <= 5 ):
+       count += 1
+       print("Waiting for EFS creation {0}".format(count));
+       time.sleep(2)
+       response = efs_client.describe_file_systems(
+          MaxItems = 1,
+          CreationToken = token
+       )
+       response = response['FileSystems'][0]
+       created = (response['LifeCycleState'] == 'available')
+
+    if (not created):
+       print("Failed to find EFS filesystem {0}".format(fs_id))
+       sys.exit(1)
+
+    response = efs_client.create_mount_target(
+       FileSystemId = fs_id,
+       SubnetId = subnet,
+       SecurityGroups = [ security_group]
+    )
+    
+    #print("Create Mount Target response")
+    #printd(response)
+    return response
+
 
 
 def make_queue(label, spot):
@@ -418,6 +488,7 @@ def configure_pcluster(args):
           lambda x: str(x).isdigit() and int(x) >= 0, default_value=10)
        config.set(section_name, "volume_size", ebs_size)
 
+      
     # [s3]
     # TODO
 
@@ -432,6 +503,8 @@ def configure_pcluster(args):
 
     # [vpc]
     section_name = "vpc {0}".format(label)
+    vpc_id = ''
+    security_group = ''
     if config.parser.has_section(section_name):
        if verbose: print("Found exisiting {0} section".format(section_name))
     else:
@@ -439,12 +512,24 @@ def configure_pcluster(args):
        for k,v in vpc_parameters.items():
            config.set(section_name, k, v)
        vpc_id =  vpc_parameters['vpc_id']
-       print("Created VPC: {0}".format(vpc_id))
+       print("Created VPC:  {0}".format(vpc_id))
        security_group = create_security_group(label, vpc_parameters['vpc_id'])
        config.set(section_name, "additional_sg", security_group)
 
+    # [efs]
+    section_name = "efs qchem"
+    if config.parser.has_section(section_name):
+       if verbose: print("Found exisiting {0} section".format(section_name))
+    else:
+       response = create_efs(vpc_id, aws_region_name, security_group)
+       fs_id = response['FileSystemId']
+       print("FileSystemID: {0}".format(fs_id))
+       config.set(section_name, "efs_fs_id",  fs_id)
+       config.set(section_name, "shared_dir", "shared/qchem")
+ 
+
     config.write()
-    print("Cluster configuration written to {0})".format(args.config_file))
+    print("Cluster configuration written to {0}".format(args.config_file))
     print("Run './qcloud_setup.py --start' to start the cluster")
 
 

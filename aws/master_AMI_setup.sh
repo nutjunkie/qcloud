@@ -40,7 +40,7 @@ docker_compose=/usr/local/bin/docker-compose
 install_rpms()
 {
    echo "Installing RPM dependencies"
-   sudo yum -y install docker lapack-devel blas-devel
+   sudo yum -y install docker lapack-devel blas-devel amazon-efs-utils
 }
 
 
@@ -130,6 +130,7 @@ plumb_pipes()
 { 
    sudo mkdir -p $prefix/qcloud/redis
    sudo mkdir -p $shared/qcloud
+   sudo mkdir -p $shared/qchem
    sudo systemctl enable docker
    sudo systemctl enable $prefix/qcloud/services/QCloud.service
    sudo systemctl enable $prefix/qcloud/services/piped.service
