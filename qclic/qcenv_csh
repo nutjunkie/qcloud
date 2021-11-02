@@ -1,0 +1,44 @@
+#!/bin/csh
+
+#if ( $?QC != 1 ) then
+#   set t = `dirname  $0`
+#   setenv QC `(cd $t>&/dev/null; pwd -P)`
+#endif
+setenv QC $QC
+#echo "QC = $QC"
+
+alias qc      "cd $QC"
+alias get_shellvar "grep '\!^ ' $QC/config/shellvar.txt | tail -n 1 | awk '{print "\$2"}' "
+alias add_path 'set TT=\!^; setenv PATH `echo ${TT}:$PATH| sed -e "s|:${TT}:|:|g"`' 
+
+if ( $?QCPLATFORM != 1 ) then
+   setenv QCPLATFORM `get_shellvar  QCPLATFORM`
+endif
+#echo "QCPLATFORM = $QCPLATFORM"
+if ( $?QCSCRATCH != 1 ) then
+   setenv QCSCRATCH  `get_shellvar  QCSCRATCH`
+endif
+if ( $?QCSCRATCH != 1 ) then
+   setenv QCLOCALSCR `get_shellvar  QCLOCALSCR`
+   if ( "x$QCLOCALSCR" == "x" ) then 
+       unsetenv QCLOCALSCR
+    endif
+endif
+if ( $?QCAUX != 1 ) then
+   setenv QCAUX  `get_shellvar  QCAUX`
+endif
+if ( $?QCMPI != 1 ) then
+   setenv QCMPI  `get_shellvar  QCMPI`
+endif
+if ( $?QCRSH != 1 ) then
+   setenv QCRSH  `get_shellvar  QCRSH`
+endif
+
+setenv QCPROG $QC/exe/qcprog.exe
+if ( -e $QC/exe/qcprog.exe_s ) then 
+   setenv QCPROG_S $QC/exe/qcprog.exe_s
+else
+   setenv QCPROG_S $QCPROG
+endif
+add_path "${QC}/bin"
+add_path "${QC}/exe"

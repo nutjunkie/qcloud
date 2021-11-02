@@ -50,7 +50,7 @@ services:
       networks:
          - qcnet
       volumes:
-         - /shared/qcloud:/shared/qcloud
+         - /shared/jobs:/shared/jobs
          - type:    bind
            source: ./config/qcloud.cfg
            target: /opt/qcloud/qcloud.cfg
@@ -69,7 +69,7 @@ services:
       networks:
          - qcnet
       volumes:
-         - /shared/qcloud:/shared/qcloud
+         - /shared/jobs:/shared/jobs
          - /opt/qcloud/egress.pipe:/opt/qcloud/egress.pipe
          - /opt/qcloud/ingress.pipe:/opt/qcloud/ingress.pipe
          - /opt/qcloud/bin/sbatch:/opt/slurm/bin/sbatch

@@ -34,7 +34,6 @@ pcluster_version="2.10.4"
 flexnet_version="11.18.0"
 qchem_version="540"
 prefix=/opt
-shared=/shared 
 docker_compose=/usr/local/bin/docker-compose
 
 
@@ -65,7 +64,6 @@ install_qcloud()
       #cd && aws s3 cp --recursive s3://qchem-qcloud/qcloud  qcloud
       sudo mv qcloud $prefix
       sudo chmod a+x $prefix/qcloud/bin/* 
-      cp $prefix/qcloud/aws/install_license.sh $HOME
 
       sudo rm -fr $prefix/qcloud/.git
       sudo rm -fr $prefix/qcloud/aws
@@ -95,6 +93,12 @@ install_qchem()
       echo "Failed to fetch qchem.  Try 'aws configure' to set credentials"
       exit 1
    fi
+}
+
+install_license()
+{
+   cp $prefix/qcloud/qclic/qcloud_install.sh $HOME
+
 }
 
 
@@ -130,11 +134,9 @@ install_flexnet()
 plumb_pipes()
 { 
    sudo mkdir -p $prefix/qcloud/redis
-   sudo mkdir -p $shared
-#  sudo mkdir -p $shared/qchem
    sudo systemctl enable docker
-   sudo systemctl enable $prefix/qcloud/services/QCloud.service
    sudo systemctl enable $prefix/qcloud/services/piped.service
+   sudo systemctl enable $prefix/qcloud/services/QCloud.service
 }
 
 
@@ -198,7 +200,7 @@ install_rpms
 install_docker_compose
 #install_qchem
 install_qcloud
-install_flexnet
+#install_flexnet
 plumb_pipes
 build_containers
 #print_msg   

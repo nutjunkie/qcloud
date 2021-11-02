@@ -366,91 +366,6 @@ def get_vpc(session, config):
 
 
 
-def create_efs(qcloud_vpc, aws_region):
-    client  = boto3.client('efs')
-    session = boto3.Session(region_name=aws_region)
-    ec2_resource = session.resource("ec2")
-    ec2_client = session.client("ec2")
-
-    # Obtain the subnet ID associated with the vpc
-    subnet_ids = []
-    for vpc in ec2_resource.vpcs.all():
-        if (vpc.id == qcloud_vpc):
-           for subnet in vpc.subnets.all():
-               subnet_ids.append(subnet.id)
-
-    n = len(subnet_ids)
-    if (n != 1):
-       print("Invalid number of subnets found for VPC {0}: {1}".format(qcloud_vpc,n))
-       if (n > 0):
-          print_dict(ec2_client.describe_subnets(SubnetIds=subnet_ids))
-       sys.exit(1)
-    
-    subnet = subnet_ids[0]
-
-
-    token = str(uuid.uuid4())
-    efs_client = session.client("efs")
-    response = efs_client.create_file_system(
-       CreationToken=token,
-       PerformanceMode='generalPurpose',
-       Encrypted=False,
-       Backup=False
-    )
-
-    fs_id = response['FileSystemId']
-    created = (response['LifeCycleState'] == 'available')
-
-    # Wait for the filesytem to come online
-    count = 0
-    while (not created and count <= 10 ):
-       count += 1
-       print("Waiting for EFS creation {0}".format(count));
-       time.sleep(2)
-       response = efs_client.describe_file_systems(
-          MaxItems = 1,
-          CreationToken = token
-       )
-       response = response['FileSystems'][0]
-       created = (response['LifeCycleState'] == 'available')
-
-    if (not created):
-       print("Failed to find EFS filesystem {0}".format(fs_id))
-       sys.exit(1)
-
-    # Obtain the security group ID associated with the 
-    security_groups = []
-
-    response = ec2_client.describe_security_groups(
-       Filters=[ {
-          'Name': 'vpc-id', 
-          'Values': [ qcloud_vpc ]
-          }
-       ]
-    )
-
-    print(response)
-    response = response['SecurityGroups']
-    for sg in response:
-        print(sg['GroupName'])
-        security_groups.append(sg['GroupId'])
-
-    #Required sg is not available atm
-
-    response = efs_client.create_mount_target(
-       FileSystemId = fs_id,
-       SubnetId = subnet,
-       SecurityGroups = security_groups
-    )
-
-    #sudo mount -t efs fs-1710f0a0 /shared/qchem
-    
-    #print("Create Mount Target response")
-    #print_dict(response)
-    return response
-
-
-
 def make_queue(label, spot):
     queue_parameters = {}
     queue_parameters['enable_efa']     = 'false'
@@ -458,6 +373,7 @@ def make_queue(label, spot):
     queue_parameters['compute_resource_settings'] = label
     if spot: queue_parameters['compute_type'] = 'spot'
     return queue_parameters
+
 
 
 def make_compute_resources(instance_type, max_count, spot_price):
@@ -468,6 +384,7 @@ def make_compute_resources(instance_type, max_count, spot_price):
     compute_resources['max_count']     = max_count
     if spot_price > 0: compute_resources['spot_price'] = spot_price
     return compute_resources
+
 
 
 def get_comp_instances(family, amd, ssd):
@@ -489,6 +406,7 @@ def get_comp_instances(family, amd, ssd):
         instances[key['InstanceType']] = key['VCpuInfo']['DefaultCores']
 
     return sorted( ((v,k) for k,v in instances.items()))
+
 
 
 def prompt_queue_types(config):
@@ -615,23 +533,23 @@ def configure_pcluster(session, args):
     config.write()
 
     # [ebs]
-    section_name = "ebs {0}".format(label)
-    if config.parser.has_section(section_name):
-       if verbose: print("Using exisiting {0} section".format(section_name))
-    else:
-       config.set(section_name, "shared_dir",  "shared/qcloud")
-       config.set(section_name, "volume_type", "gp2") # also st1
-       ebs_size = prompt("Shared storage size (Gb)",
-          lambda x: str(x).isdigit() and int(x) >= 0, default_value=10)
-       config.set(section_name, "volume_size", ebs_size)
-    config.write()
+    #section_name = "ebs {0}".format(label)
+    #if config.parser.has_section(section_name):
+    #   if verbose: print("Using exisiting {0} section".format(section_name))
+    #else:
+    #   config.set(section_name, "shared_dir",  "shared")
+    #   config.set(section_name, "volume_type", "gp2") # also st1
+    #   ebs_size = prompt("Shared storage size (Gb)",
+    #      lambda x: str(x).isdigit() and int(x) >= 0, default_value=10)
+    #   config.set(section_name, "volume_size", ebs_size)
+    #config.write()
 
     # [efs]
     section_name = "efs {0}".format(label)
     if config.parser.has_section(section_name):
        if verbose: print("Using exisiting {0} section".format(section_name))
     else:
-       config.set(section_name, "shared_dir",  "shared/qcloud")
+       config.set(section_name, "shared_dir",  "shared")
        config.set(section_name, "encrypted", "false")
        config.set(section_name, "performance_mode", "generalPurpose")
     config.write()
@@ -665,19 +583,6 @@ def configure_pcluster(session, args):
        config.set(section_name, "additional_sg", security_group)
     config.write()
 
-    # [efs]
-    # Required security groups dne atm, need to postpone until cluster exists
-    #section_name = "efs qchem"
-    #if config.parser.has_section(section_name):
-    #   if verbose: print("Using exisiting {0} section".format(section_name))
-    #else:
-    #   response = create_efs(vpc_id, session.region_name)
-    #   fs_id = response['FileSystemId']
-    #   print("FileSystemID: {0}".format(fs_id))
-    #   config.set(section_name, "efs_fs_id",  fs_id)
-    #   config.set(section_name, "shared_dir", "shared/qchem")
-    #config.write()
-#
     print("Cluster configuration written to {0}".format(args.config_file))
     print("Run './qcloud_setup.py --start' to start the cluster")
 

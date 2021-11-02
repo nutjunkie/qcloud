@@ -1,0 +1,37 @@
+
+installer_version  ;  16
+installer_scripts  ;  liveupdate.sh  license.sh qcenv_sh qcenv_csh qcinstall.sh brianqc_installer.bin
+#sta_exes
+ # platform       QCMPI      CONFIG_ID                CONFIG_ID_S        driver           description
+ LINUX_Ix86_64 ;  SEQ     ; LINUX_Ix86_64         ;   LINUX_Ix86_64 ;  driver_linux   ;  Linux 64-bit shared-memory version
+ LINUX_Ix86_64 ;  MPICH3  ; LINUX_Ix86_64_MPICH3  ;   LINUX_Ix86_64 ;  driver_linux   ;  Linux 64-bit cluster version (requires MPICH3)
+ LINUX_Ix86_64 ;  OPENMPI ; LINUX_Ix86_64_OPENMPI ;   LINUX_Ix86_64 ;  driver_linux   ;  Linux 64-bit cluster version (requires OpenMPI 1.10)
+ LINUX_Ix86_64 ;  SEQ     ; LINUX_Ix86_64_GPU     ;   LINUX_Ix86_64_GPU ;  driver_linux   ;  Linux 64-bit version with NVIDIA GPU support (installs BrianQC)
+ MAC_Ix86      ;  SEQ     ; MAC_Ix86_64           ;   MAC_Ix86_64   ;  driver_macosx ;  Mac OS X 64-bit shared-memory version
+ MAC_Ix86      ;  MPICH3  ; MAC_Ix86_64_MPICH3    ;   MAC_Ix86_64   ;  driver_macosx ;  Mac OS X 64-bit cluster version (requires MPICH3)
+#end_exes
+
+# ==================================
+#
+# Live 1.  read configuration file
+#
+# ==================================
+
+#sta_config
+ VERSION               ;  5.3.2
+ #
+ LINUX_Ix86_64         ; 5320 ; https://downloads.q-chem.com/qc532/exes/qcprog.exe.LINUX_Ix86_64.5320.gz         ;  exe ; exes/qcprog.exe.LINUX_Ix86_64.5320.gz
+ LINUX_Ix86_64_MPICH3  ; 5320 ; https://downloads.q-chem.com/qc532/exes/qcprog.exe.LINUX_Ix86_64_MPICH3.5320.gz  ;  exe ; exes/qcprog.exe.LINUX_Ix86_64_MPICH3.5320.gz
+ LINUX_Ix86_64_OPENMPI ; 5320 ; https://downloads.q-chem.com/qc532/exes/qcprog.exe.LINUX_Ix86_64_OPENMPI.5320.gz ;  exe ; exes/qcprog.exe.LINUX_Ix86_64_OPENMPI.5320.gz
+ LINUX_Ix86_64_GPU     ; 5320 ; https://downloads.q-chem.com/qc532/exes/qcprog.exe.LINUX_Ix86_64_GPU.5320.gz     ;  exe ; exes/qcprog.exe.LINUX_Ix86_64_GPU.5320.gz
+ MAC_Ix86_64           ; 5320 ; https://downloads.q-chem.com/qc532/exes/qcprog.exe.MAC_Ix86_64.5320.gz           ;  exe ; exes/qcprog.exe.MAC_Ix86_64.5320.gz 
+ MAC_Ix86_64_MPICH3    ; 5320 ; https://downloads.q-chem.com/qc532/exes/qcprog.exe.MAC_Ix86_64_MPICH3.5320.gz    ;  exe ; exes/qcprog.exe.MAC_Ix86_64_MPICH3.5320.gz  
+ # 
+ qcaux                 ; 5300 ; https://downloads.q-chem.com/qc530/tarfiles/qcaux.5300.tar.gz                    ;  qcaux             ; tarfiles/qcaux.tar.gz 
+ qcsample              ; 5320 ; https://downloads.q-chem.com/qc532/tarfiles/qcsamples.5320.tar.gz                ;  samples           ; tarfiles/qcsamples.tar.gz 
+ driver_linux          ; 5300 ; https://downloads.q-chem.com/qc530/drivers/drivers.linux.tar.gz                ;  qcaux             ; drivers/drivers.linux.tar.gz
+ driver_macosx         ; 5300 ; https://downloads.q-chem.com/qc530/drivers/drivers.macosx.tar.gz               ;  qcaux             ; drivers/drivers.macosx.tar.gz 
+ qcbin                 ; 5310 ; https://downloads.q-chem.com/qc531/tarfiles/qcbin.5310.tar.gz                    ;  bin               ; tarfiles/qcbin.5310.tar.gz 
+ qcdoc                 ; 5310 ; https://downloads.q-chem.com/qc531/tarfiles/qcdoc.5310.tar.gz                    ;  doc               ; tarfiles/qcdoc.5310.tar.gz 
+#end_config
+
