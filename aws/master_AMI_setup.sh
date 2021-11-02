@@ -15,6 +15,7 @@
 #        us-west-1: ami-0f1328eb1e03d7fb2
 #
 #  The image can be built on a t2.micro instance with default resources.
+#      25 Gb volume on /dev/xvda1  mount on /
 #
 #  This file can be downloaded within the launched instance with the command:
 #
@@ -129,8 +130,8 @@ install_flexnet()
 plumb_pipes()
 { 
    sudo mkdir -p $prefix/qcloud/redis
-   sudo mkdir -p $shared/qcloud
-   sudo mkdir -p $shared/qchem
+   sudo mkdir -p $shared
+#  sudo mkdir -p $shared/qchem
    sudo systemctl enable docker
    sudo systemctl enable $prefix/qcloud/services/QCloud.service
    sudo systemctl enable $prefix/qcloud/services/piped.service
@@ -160,6 +161,15 @@ print_msg()
 }
 
 
+cleanup()
+{
+   echo "Removing AWS credentials and SSH keys"
+   rm -fr ~/.aws ~/.ssh master_AMI_setup.sh
+   echo "Removing logs"
+   sudo /usr/local/sbin/ami_cleanup.sh
+}
+
+
 pcfile="/opt/parallelcluster/.bootstrapped"
 url="https://github.com/aws/aws-parallelcluster/blob/v$pcluster_version/amis.txt"
 
@@ -186,10 +196,11 @@ fi
 aws configure
 install_rpms
 install_docker_compose
-install_qchem
+#install_qchem
 install_qcloud
 install_flexnet
 plumb_pipes
 build_containers
-print_msg   
+#print_msg   
+cleanup
 

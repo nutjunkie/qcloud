@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import time
+import json
 import uuid
 import pprint
 import pathlib
@@ -11,12 +12,11 @@ import argparse
 import configparser
 import subprocess
 
-import json
-
 import botocore
 import boto3
 
 from future.backports import datetime
+from operator import attrgetter
 
 from pcluster.configure.utils import (
    get_regions,
@@ -46,6 +46,7 @@ from pcluster.config.validators import (
 from pcluster.networking.vpc_factory import VpcFactory
 
 
+
 class PClusterConfig:
       def __init__(self, config_file, label):
           self.config_file = config_file
@@ -61,7 +62,6 @@ class PClusterConfig:
           else:
              msg = "INFO: Configuration file {0} will be written."
              print(msg.format(config_file))
-             print("Press CTRL-C to interrupt the procedure.\n")
 
       def get(self, section, option, default=None):
           if not self.parser.has_section(section): return default
@@ -103,8 +103,10 @@ class PClusterConfig:
              self.parser.write(cfg)
 
 
-def printd(dict):
+
+def print_dict(dict):
     print(json.dumps(dict, sort_keys=True, indent=4))
+
 
 
 def instance_type_supported_for_head_node(instance_type):
@@ -114,21 +116,90 @@ def instance_type_supported_for_head_node(instance_type):
     return True
 
 
-def get_aws_keys():
+
+def configure_aws_cli():
+    print("Configuring AWS CLI client")
+    print("If you have not already done so, you will need to create an access key and")
+    print("password pair in the AWS console under the Identity and Access Management")
+    print("(IAM) panel.")
+
+    cmd = [ "aws", "configure" ]
+    code = os.spawnvpe(os.P_WAIT, cmd[0], cmd, os.environ)
+    if code == 127:
+        print("{0}: command not found".format(cmd[0]))
+        sys.exit(1)
+    return code
+
+
+
+def create_session():
+    session = None
+
+    while (not session):
+        try:
+            sts_client = boto3.client('sts')
+            sts_client.get_caller_identity()
+            session = boto3.Session()
+            print("Creating session for region {0}".format(session.region_name))
+            os.environ["AWS_DEFAULT_REGION"] = session.region_name
+
+        except (botocore.exceptions.ClientError,
+                botocore.exceptions.NoCredentialsError):
+            configure_aws_cli()
+
+        except botocore.exceptions.CredentialRetrievalError:
+            print("Unable to access AWS credentials")
+            sys.exit(1)
+
+    return session
+
+
+def get_ami(session):
+    ami_id = None
+    try:
+        ec2_resource = session.resource("ec2")
+        images = ec2_resource.images.filter(
+            Filters=[
+                {
+                    'Name': 'name',
+                    'Values': ['QCloud*']
+                }
+            ]
+        )
+        images = sorted(list(images), key=attrgetter('creation_date'), reverse=True)
+
+        for image in images:
+            if (not ('setup' in image.name.lower())):
+                ami_id = image.id
+                print("INFO: Using QCloud AMI {0} {1}".format(image.name, image.id))
+                break
+        if (not ami_id):
+            raise Exception
+
+    except:
+        print("Unable to determine QCloud AMI")
+        sys.exit(1)
+
+    return ami_id
+
+
+
+def get_aws_keys(session):
     """Return a list of valid AWS keys."""
-    keypairs = boto3.client("ec2").describe_key_pairs()
+    ec2_client = session.client("ec2")
+    keypairs = ec2_client.describe_key_pairs()
     key_options = []
     for key in keypairs.get("KeyPairs"):
         key_name = key.get("KeyName")
         key_options.append(key_name)
 
     if not key_options:
-       print(
-          "No KeyPair found in region {0}, please create one following the guide: "
-          "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html".format(get_region())
-        )
+       print("No KeyPair found in region {0}, please create one following the guide: "
+             "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html".format(get_region()) )
+       sys.exit(1)
 
     return key_options
+
 
 
 def choose_network_configuration(node_types):
@@ -169,46 +240,62 @@ def choose_network_configuration(node_types):
 #TODO this needs to handle the presence of an existing sg that doesn't have the ports open
 #TODO the port numbers are hard wired an should be obtained from qcloud.cfg
 def create_security_group(label, vpc_id):
-    group_id = ''
+    group_id = None
+    group_name = label + "-sg"
     try:
-       client = boto3.client('ec2')
-       response = client.create_security_group(
-          Description = "QCloud security group",
-          GroupName = label + "-sg",
-          VpcId = vpc_id
-       )
-       time.sleep(3)
-       #print(response)
-       group_id = response['GroupId']
-       print("GroupID:     {0}".format(group_id))
-       data = client.authorize_security_group_ingress(
-           GroupId = group_id,
-           IpPermissions = [
-               {'IpProtocol': 'tcp',
-                'FromPort': 8883,
-                'ToPort': 8883,
-                'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'qcweb'}]},
-               {'IpProtocol': 'tcp',
-                'FromPort': 8882,
-                'ToPort': 8882,
-                'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'qcauth'}]},
-               {'IpProtocol': 'tcp',
-                'FromPort': 55555,
-                'ToPort': 55555,
-                'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'flexnet'}]},
-               {'IpProtocol': 'tcp',
-                'FromPort': 27000,
-                'ToPort': 27010,
-                'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'flexnet ports'}]}
-           ])
+        ec2_client = boto3.client('ec2')
 
-       #print('Ingress Successfully Set %s' % data)
+        # First check if there already exists the SG
+        response = ec2_client.describe_security_groups(
+            Filters=[
+                {
+                    'Name': 'group-name',
+                    'Values': [ group_name ]
+                }
+            ]
+        )
 
-    except client.exceptions.ClientError as err:
-       # TODO parse err to see if group already exists
-       print(err)
+        #if response['SecurityGroups']
+
+       
+        response = ec2_client.create_security_group(
+            Description = "QCloud security group",
+            GroupName = group_name,
+            VpcId = vpc_id
+        )
+        time.sleep(3)
+        #print(response)
+        group_id = response['GroupId']
+        print("GroupID:     {0}".format(group_id))
+        data = ec2_client.authorize_security_group_ingress(
+            GroupId = group_id,
+            IpPermissions = [
+                {'IpProtocol': 'tcp',
+                 'FromPort': 8883,
+                 'ToPort': 8883,
+                 'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'qcweb'}]},
+                {'IpProtocol': 'tcp',
+                 'FromPort': 8882,
+                 'ToPort': 8882,
+                 'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'qcauth'}]},
+                {'IpProtocol': 'tcp',
+                 'FromPort': 55555,
+                 'ToPort': 55555,
+                 'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'flexnet'}]},
+                {'IpProtocol': 'tcp',
+                 'FromPort': 27000,
+                 'ToPort': 27010,
+                 'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'flexnet ports'}]}
+            ])
+
+        #print('Ingress Successfully Set %s' % data)
+
+    except botocore.exceptions.ClientError as err:
+        # TODO parse err to see if group already exists
+        print(err)
 
     return group_id
+
 
 
 def automate_vpc_with_subnet_creation(network_configuration, compute_subnet_size, region):
@@ -236,25 +323,56 @@ def automate_vpc_with_subnet_creation(network_configuration, compute_subnet_size
     return vpc_parameters
 
 
-def create_vpc(config, aws_region):
+
+def create_vpc(session, config):
     vpc_parameters = {}
     node_types = config.node_types()
     min_subnet_size = int(config.max_cluster_size())
     network_config = choose_network_configuration(node_types)
-    vpc_parameters.update(automate_vpc_with_subnet_creation(network_config, min_subnet_size, aws_region))
+    vpc_parameters.update(automate_vpc_with_subnet_creation(network_config, min_subnet_size, session.region_name))
 
     if (network_config.template_name == 'public-private'):
        print("WARNING: A NAT gateway has been created and is being charged per hour")
     return vpc_parameters
 
 
-def create_efs(qcloud_vpc, aws_region, security_group):
+
+def get_vpc(session, config):
+    vpc_id = None
+    ec2_resource = session.resource("ec2")
+
+    # Check if there is an existing VPC 
+    vpcs = ec2_resource.vpcs.all()
+    avail = []
+    for vpc in vpcs:
+        if (vpc.state == 'available'):
+           for tag in vpc.tags:
+               val = tag['Value']
+               if 'QCloud-VPC' in val:
+                   avail.append("{0}  {1}  {2}".format(vpc.id, val, vpc.state))
+    if avail:
+        avail.insert(0, "Create new")
+        response = prompt_iterable("VPC", avail)
+        vpc_id = None if response == "Create new" else response.split()[0]
+
+    vpc_params = {}
+    if (vpc_id):
+        vpc_params = {"vpc_id": vpc_id}
+        print("WARNING: Incomplete VPC parameter list returned")
+    else:
+        vpc_params = create_vpc(session, config)
+
+    return vpc_params
+
+
+
+def create_efs(qcloud_vpc, aws_region):
     client  = boto3.client('efs')
     session = boto3.Session(region_name=aws_region)
     ec2_resource = session.resource("ec2")
     ec2_client = session.client("ec2")
 
-    # Obtain the subnet ID associted with the vpc
+    # Obtain the subnet ID associated with the vpc
     subnet_ids = []
     for vpc in ec2_resource.vpcs.all():
         if (vpc.id == qcloud_vpc):
@@ -265,10 +383,11 @@ def create_efs(qcloud_vpc, aws_region, security_group):
     if (n != 1):
        print("Invalid number of subnets found for VPC {0}: {1}".format(qcloud_vpc,n))
        if (n > 0):
-          printd(ec2_client.describe_subnets(SubnetIds=subnet_ids))
+          print_dict(ec2_client.describe_subnets(SubnetIds=subnet_ids))
        sys.exit(1)
     
     subnet = subnet_ids[0]
+
 
     token = str(uuid.uuid4())
     efs_client = session.client("efs")
@@ -284,7 +403,7 @@ def create_efs(qcloud_vpc, aws_region, security_group):
 
     # Wait for the filesytem to come online
     count = 0
-    while (not created and count <= 5 ):
+    while (not created and count <= 10 ):
        count += 1
        print("Waiting for EFS creation {0}".format(count));
        time.sleep(2)
@@ -299,14 +418,35 @@ def create_efs(qcloud_vpc, aws_region, security_group):
        print("Failed to find EFS filesystem {0}".format(fs_id))
        sys.exit(1)
 
+    # Obtain the security group ID associated with the 
+    security_groups = []
+
+    response = ec2_client.describe_security_groups(
+       Filters=[ {
+          'Name': 'vpc-id', 
+          'Values': [ qcloud_vpc ]
+          }
+       ]
+    )
+
+    print(response)
+    response = response['SecurityGroups']
+    for sg in response:
+        print(sg['GroupName'])
+        security_groups.append(sg['GroupId'])
+
+    #Required sg is not available atm
+
     response = efs_client.create_mount_target(
        FileSystemId = fs_id,
        SubnetId = subnet,
-       SecurityGroups = [ security_group]
+       SecurityGroups = security_groups
     )
+
+    #sudo mount -t efs fs-1710f0a0 /shared/qchem
     
     #print("Create Mount Target response")
-    #printd(response)
+    #print_dict(response)
     return response
 
 
@@ -394,141 +534,150 @@ def prompt_queue_types(config):
     return queue_labels
     
 
-def configure_pcluster(args):
+
+def configure_pcluster(session, args):
+    # config file
     config_file = args.config_file
     if (os.path.isfile(config_file)):
-       delete = prompt("Delete existing config file {0}? (y/n)".format(config_file),
-          lambda x: x in ("y", "n"), default_value="y") == "y"
-       if (delete):
-          os.remove(config_file)
-       else:
-          print("Settings from {0} will be used".format(config_file))
+        delete = prompt("Delete existing config file {0}? (y/n)".format(config_file),
+           lambda x: x in ("y", "n"), default_value="y") == "y"
+        if (delete):
+            os.remove(config_file)
+        else:
+            print("Settings from {0} will be used".format(config_file))
 
     config  = PClusterConfig(args.config_file, args.label)
     label   = args.label
     verbose = args.verbose
 
     # [aws]
-    aws_region_name = subprocess.check_output(
-            "aws configure list | grep region | awk '{print $2}'", shell=True, text=True)
-    #aws_region_name = config.get("aws", "aws_region_name")
-    aws_region_name = aws_region_name.strip()
-    print("Current aws_region set to {0}".format(aws_region_name))
-    if not aws_region_name:
-       available_regions = get_regions()
-       session = boto3.session.Session()
-       default_region = session.region_name
-       aws_region_name = prompt_iterable("AWS Region ID", 
-          available_regions, default_value=default_region)
-       config.set("aws", "aws_region_name", aws_region_name)
-       print("Region set to ", aws_region_name)
-
-    config.set("aws", "aws_region_name", aws_region_name)
-    os.environ["AWS_DEFAULT_REGION"] = aws_region_name
+    section_name = "aws"
+    config.set(section_name, "aws_region_name", session.region_name)
+    config.write()
 
     # [global]
     section_name = "global"
     if config.parser.has_section(section_name):
-       if verbose: print("Found exisiting {0} section".format(section_name))
+        if verbose: print("Using exisiting {0} section".format(section_name))
     else:
-       config.set(section_name, "cluster_template", label)
-       config.set(section_name, "update_check", "true")
-       config.set(section_name, "sanity_check", "true")
+        config.set(section_name, "cluster_template", label)
+        config.set(section_name, "update_check", "true")
+        config.set(section_name, "sanity_check", "true")
+    config.write()
 
     # [aliases]
     section_name = "aliases"
-    config.set(section_name, "ssh", "ssh {CFN_USER}@{MASTER_IP} {ARGS}")
+    if config.parser.has_section(section_name):
+       if verbose: print("Using exisiting {0} section".format(section_name))
+    else:
+        config.set(section_name, "ssh", "ssh {CFN_USER}@{MASTER_IP} {ARGS}")
+    config.write()
 
     # [cluster]
-    scheduler = "slurm"
     section_name = "cluster {0}".format(label)
-    config.set(section_name, "scheduler", scheduler)
-    config.set(section_name, "vpc_settings", label)
-    config.set(section_name, "ebs_settings", label)
+    if config.parser.has_section(section_name):
+        if verbose: print("Using exisiting {0} section".format(section_name))
+    else:
+        config.set(section_name, "scheduler", "slurm")
+        config.set(section_name, "vpc_settings", label)
+        # config.set(section_name, "ebs_settings", label)
+        config.set(section_name, "efs_settings", label)
+        qcloud_ami = get_ami(session)
+        config.set(section_name, "custom_ami", qcloud_ami)
 
-    qcloud_ami = "ami-08994798d3214a7fb" 
-    config.set(section_name, "custom_ami", qcloud_ami)
+        key_name = config.get(section_name, "key_name")
+        if not key_name:
+            key_name = prompt_iterable("EC2 Key Pair Name", get_aws_keys(session))
+            config.set(section_name, "key_name", key_name)
 
-    key_name = config.get(section_name, "key_name")
-    if not key_name:
-       key_name = prompt_iterable("EC2 Key Pair Name", get_aws_keys())
-       config.set(section_name, "key_name", key_name)
+        # The user cannot change this as each OS requires and AMI
+        base_os = "alinux2"
+        config.set(section_name, "base_os", base_os)
 
-    # The user cannot change this as it requires generating an AMI for each OS
-    base_os = "alinux2"
-    config.set(section_name, "base_os", base_os)
-
-    master_instance_type = config.get(section_name, "master_instance_type")
-    if not master_instance_type:
-       default_instance_type = get_default_instance_type()
-       master_instance_type = prompt("Head node instance type",
-          lambda x: instance_type_supported_for_head_node(x) and x in get_supported_instance_types(),
-          default_value=default_instance_type)
-       config.set(section_name, "master_instance_type", master_instance_type)
+        master_instance_type = config.get(section_name, "master_instance_type")
+        if not master_instance_type:
+            default_instance_type = get_default_instance_type()
+            master_instance_type = prompt("Head node instance type",
+               lambda x: instance_type_supported_for_head_node(x) and x in get_supported_instance_types(),
+               default_value=default_instance_type)
+        config.set(section_name, "master_instance_type", master_instance_type)
+    config.write()
 
     # [queue xxx]
     sections = config.parser.sections()
     if any("queue {0}".format(label) in s for s in sections):
-       if verbose: 
-          print("Found {0} exisiting queues".format(sum("queue {0}".format(label) in s for s in sections)))
+        if verbose: 
+            print("Using {0} exisiting queues".format(sum("queue {0}".format(label) in s for s in sections)))
     else:
-       queues = prompt_queue_types(config)
-       section_name = "cluster {0}".format(label)
-       config.set(section_name, "queue_settings", ", ".join(queues))
+        queues = prompt_queue_types(config)
+        section_name = "cluster {0}".format(label)
+        config.set(section_name, "queue_settings", ", ".join(queues))
+    config.write()
 
     # [ebs]
     section_name = "ebs {0}".format(label)
     if config.parser.has_section(section_name):
-       if verbose: print("Found exisiting {0} section".format(section_name))
+       if verbose: print("Using exisiting {0} section".format(section_name))
     else:
        config.set(section_name, "shared_dir",  "shared/qcloud")
-       #config.set(section_name, "volume_type", "st1")
-       config.set(section_name, "volume_type", "gp2")
+       config.set(section_name, "volume_type", "gp2") # also st1
        ebs_size = prompt("Shared storage size (Gb)",
           lambda x: str(x).isdigit() and int(x) >= 0, default_value=10)
        config.set(section_name, "volume_size", ebs_size)
+    config.write()
 
-      
+    # [efs]
+    section_name = "efs {0}".format(label)
+    if config.parser.has_section(section_name):
+       if verbose: print("Using exisiting {0} section".format(section_name))
+    else:
+       config.set(section_name, "shared_dir",  "shared/qcloud")
+       config.set(section_name, "encrypted", "false")
+       config.set(section_name, "performance_mode", "generalPurpose")
+    config.write()
+ 
     # [s3]
     # TODO
 
     # [scaling]
     section_name = "scaling {0}".format(label)
     if config.parser.has_section(section_name):
-       if verbose: print("Found exisiting {0} section".format(section_name))
+        if verbose: print("Using exisiting {0} section".format(section_name))
     else:
-       idle_time = prompt("Maximum idle time for compute nodes (mins)",
-          lambda x: str(x).isdigit() and int(x) >= 0, default_value=5)
-       config.set(section_name, "scaledown_idletime", idle_time)
+        idle_time = prompt("Maximum idle time for compute nodes (mins)",
+            lambda x: str(x).isdigit() and int(x) >= 0, default_value=5)
+        config.set(section_name, "scaledown_idletime", idle_time)
+    config.write()
 
     # [vpc]
     section_name = "vpc {0}".format(label)
     vpc_id = ''
     security_group = ''
     if config.parser.has_section(section_name):
-       if verbose: print("Found exisiting {0} section".format(section_name))
+       if verbose: print("Using exisiting {0} section".format(section_name))
     else:
-       vpc_parameters = create_vpc(config, aws_region_name)
+       vpc_parameters = get_vpc(session, config)
        for k,v in vpc_parameters.items():
            config.set(section_name, k, v)
        vpc_id =  vpc_parameters['vpc_id']
        print("Created VPC:  {0}".format(vpc_id))
-       security_group = create_security_group(label, vpc_parameters['vpc_id'])
+       security_group = create_security_group(label, vpc_id)
        config.set(section_name, "additional_sg", security_group)
+    config.write()
 
     # [efs]
-    section_name = "efs qchem"
-    if config.parser.has_section(section_name):
-       if verbose: print("Found exisiting {0} section".format(section_name))
-    else:
-       response = create_efs(vpc_id, aws_region_name, security_group)
-       fs_id = response['FileSystemId']
-       print("FileSystemID: {0}".format(fs_id))
-       config.set(section_name, "efs_fs_id",  fs_id)
-       config.set(section_name, "shared_dir", "shared/qchem")
- 
-
-    config.write()
+    # Required security groups dne atm, need to postpone until cluster exists
+    #section_name = "efs qchem"
+    #if config.parser.has_section(section_name):
+    #   if verbose: print("Using exisiting {0} section".format(section_name))
+    #else:
+    #   response = create_efs(vpc_id, session.region_name)
+    #   fs_id = response['FileSystemId']
+    #   print("FileSystemID: {0}".format(fs_id))
+    #   config.set(section_name, "efs_fs_id",  fs_id)
+    #   config.set(section_name, "shared_dir", "shared/qchem")
+    #config.write()
+#
     print("Cluster configuration written to {0}".format(args.config_file))
     print("Run './qcloud_setup.py --start' to start the cluster")
 
@@ -593,7 +742,7 @@ def pcluster_delete(args):
        label = args.label
        print("Deleting VPC cluster {0} with config file {1}".format(label,config_file))
        print("This will delete all AWS resources accociated with this cluster, including storage.")
-       response = input("Coninue? [y/N]")
+       response = input("Continue? [y/N]")
 
        if (response == 'y' or response == 'yes'):
           cmd = "pcluster delete {0}".format(label);
@@ -608,19 +757,6 @@ def pcluster_delete(args):
 
 
 
-
-def configure_aws_cli():
-    print("Configuring AWS CLI client")
-    print("If you have not already done so, you will need to create an access key and")
-    print("password pair in the AWS console under the Identity and Access Management")
-    print("(IAM) panel.  If you have already done this, these details will be provided")
-    print("as defaults.")
-
-    cmd = [ "aws", "configure" ]
-    code = os.spawnvpe(os.P_WAIT, cmd[0], cmd, os.environ)
-    if code == 127:
-        sys.stderr.write('{0}: command not found\n'.format(cmd[0]))
-    return code
 
 
 def create_account():
@@ -686,52 +822,57 @@ def create_account():
 
 
 if __name__ == "__main__":
-   parser = argparse.ArgumentParser();
-   parser.add_argument("-f", "--file", dest="config_file", default="qcloud.config", 
-       help="Defines an alternative config file.")
+    parser = argparse.ArgumentParser();
+    parser.add_argument("-f", "--file", dest="config_file", default="qcloud.config", 
+        help="Defines an alternative config file.")
 
-   parser.add_argument("-v", "--verbose", dest="verbose", action='store_true',
-       help="Increase printout level")
+    parser.add_argument("-v", "--verbose", dest="verbose", action='store_true',
+        help="Increase printout level")
 
-   parser.add_argument("-l", "--label", dest="label", default="qcloud",
-       help="Name of the cluster")
+    parser.add_argument("-l", "--label", dest="label", default="qcloud",
+        help="Name of the cluster")
 
-   parser.add_argument("-k", "--keygen", dest="keygen",  action='store_true',
-       help="Generate keys")
+    parser.add_argument("-k", "--keygen", dest="keygen",  action='store_true',
+        help="Generate keys")
 
-   parser.add_argument("-s", "--start", dest="start",  action='store_true',
-       help='Start the cluster')
+    parser.add_argument("-s", "--start", dest="start",  action='store_true',
+        help='Start the cluster')
 
-   parser.add_argument("-x", "--delete", dest="delete",  action='store_true',
-       help='Delete the cluster')
+    parser.add_argument("-x", "--delete", dest="delete",  action='store_true',
+        help='Delete the cluster')
 
-   parser.add_argument("-i", "--info", dest="info",  action='store_true',
-       help='Get information on the cluster')
+    parser.add_argument("-i", "--info", dest="info",  action='store_true',
+        help='Get information on the cluster')
 
-   parser.add_argument("-c", "--config", dest="config",  action='store_true',
-       help='Configure the cluster')
+    parser.add_argument("-t", "--status", dest="info",  action='store_true',
+        help='Get information on the cluster')
 
-   args, extra_args = parser.parse_known_args()
+    parser.add_argument("-c", "--config", dest="config",  action='store_true',
+        help='Configure the cluster')
 
-   if args.keygen:
-      configure_aws_cli()
-      create_account()
+    args, extra_args = parser.parse_known_args()
 
-   elif args.start:
-      pcluster_create(args)
-      pcluster_start(args)
+    session = create_session()
+    #ami = get_ami(session)
+    #print("QCloud AMI set to: ",ami)
+    #sys.exit(1)
 
-   elif args.info:
-      pcluster_info(args)
+    if args.keygen:
+       create_account()
 
-   elif args.delete:
-      pcluster_delete(args)
+    elif args.start:
+       pcluster_create(args)
+       pcluster_start(args)
 
-   elif args.config:
-      configure_pcluster(args)
+    elif args.info:
+       pcluster_info(args)
 
-   else:
-      configure_aws_cli()
-      configure_pcluster(args)
+    elif args.delete:
+       pcluster_delete(args)
 
+    elif args.config or len(sys.argv) == 1:
+       configure_pcluster(session, args)
+
+    else:
+        print("Unrecognised argument:", sys.argv[1]);
 
