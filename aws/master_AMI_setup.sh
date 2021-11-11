@@ -33,7 +33,6 @@
 
 pcluster_version="2.10.4"
 flexnet_version="11.18.0"
-qchem_version="540"
 prefix=/opt
 docker_compose=/usr/local/bin/docker-compose
 
@@ -75,27 +74,6 @@ install_qcloud()
 }
 
 
-install_qchem()
-{
-   qc="qchem_$qchem_version"
-
-   shopt -s nullglob
-   set -- $prefix/qchem*/
-   [ "$#" -gt 0 ] && echo "Detected existing qchem installation in $prefix" && return
-
-   echo "Fetching Q-Chem"
-   cd && aws s3 cp s3://qchem-private/$qc.tgz .
-   if [ -e $qc.tgz ]; then
-      echo "Installing Q-Chem"
-      sudo tar xfz  $qc.tgz -C $prefix
-      sudo ln -s $prefix/$qc $prefix/qchem
-      rm $qc.tgz
-   else  
-      echo "Failed to fetch qchem.  Try 'aws configure' to set credentials"
-      exit 1
-   fi
-}
-
 install_license()
 {
    cp $prefix/qcloud/qclic/qcloud_install.sh $HOME
@@ -135,7 +113,6 @@ plumb_pipes()
 { 
    sudo mkdir -p /shared
    sudo mkdir -p $prefix/qcloud/redis
-   sudo systemctl enable docker
    sudo systemctl enable $prefix/qcloud/services/piped.service
    sudo systemctl enable $prefix/qcloud/services/QCloud.service
 }
@@ -144,6 +121,7 @@ plumb_pipes()
 build_containers()
 {
    echo "Starting docker daemon"
+   sudo systemctl enable docker
    sudo systemctl start docker
    cd $prefix/qcloud
    echo "Building qcloud service containers"
@@ -153,23 +131,13 @@ build_containers()
 }
 
 
-print_msg()
-{
-   echo ""
-   echo "Build packages complete."
-   echo "Run the following commands before shutting down this instance and creating an AMI:"
-   echo ""
-   echo "  sudo /usr/local/sbin/ami_cleanup.sh"
-   echo "  rm -fr ~/.aws ~/.ssh master_AMI_setup.sh"
-}
-
-
 cleanup()
 {
    echo "Removing AWS credentials and SSH keys"
    rm -fr ~/.aws ~/.ssh 
    echo "Removing logs"
    sudo /usr/local/sbin/ami_cleanup.sh
+   echo "System ready for building AMI after shutdown"
 }
 
 
@@ -199,12 +167,10 @@ fi
 aws configure
 install_rpms
 install_docker_compose
-#install_qchem
 install_license
 install_qcloud
 install_flexnet
 plumb_pipes
 build_containers
-#print_msg   
 cleanup
 
