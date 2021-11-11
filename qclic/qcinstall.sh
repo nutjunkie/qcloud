@@ -622,7 +622,12 @@ if [ "x${with_update}" == "x0" ] ; then
       print_welcome_online
    fi
    #select_qcdir
-   select_qcdir_new
+   if [ "x${qcloud_qc}" == "x" ] ; then
+      select_qcdir_new
+   else
+      QC=${qcloud_qc}
+      with_update=2
+   fi
 fi
 
 if [ "x${with_update}" == "x1" ] || [ "x${with_update}" == "x2" ]; then
@@ -743,6 +748,11 @@ for iscript in ${installer_scripts} ; do
       exit 9
    fi
 done
+
+if [ "x${qcloud_dir}" != "x" ] ; then
+   echo " Using QCloud install scripts"
+   cp $qcloud_dir/qclic/* $with_updatedir
+fi
 
 
 #-------------------------------------- 

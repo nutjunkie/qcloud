@@ -890,6 +890,7 @@ stop_spinner
    if [ ${if_lic_upgrade} != 0 ] || [ "x${with_update}" == "x2" ] ; then
       register_qchem
       qchem_license
+
 start_spinner 
    read -t 4  any
 stop_spinner 

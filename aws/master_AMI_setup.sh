@@ -61,7 +61,6 @@ install_qcloud()
    if [ ! -d $prefix/qcloud ]; then
       echo "Installing QCloud"
       cd && git clone https://github.com/nutjunkie/qcloud qcloud
-      #cd && aws s3 cp --recursive s3://qchem-qcloud/qcloud  qcloud
       sudo mv qcloud $prefix
       sudo chmod a+x $prefix/qcloud/bin/* 
 
@@ -76,7 +75,7 @@ install_qcloud()
 
 install_license()
 {
-   cp $prefix/qcloud/qclic/qcloud_install.sh $HOME
+   cp $prefix/qcloud/qclic/qchem_install.sh $HOME
 }
 
 
@@ -111,7 +110,7 @@ install_flexnet()
 
 plumb_pipes()
 { 
-   sudo mkdir -p /shared
+   sudo mkdir -p /scratch
    sudo mkdir -p $prefix/qcloud/redis
    sudo systemctl enable $prefix/qcloud/services/piped.service
    sudo systemctl enable $prefix/qcloud/services/QCloud.service

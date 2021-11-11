@@ -531,6 +531,7 @@ ENDOF_FAILED_LIC
 
 function submit_license
 {  
+   with_wget="nothanks"
    #
    #license_display_submission $1
    #if [ $? != 0 ] ; then return $? ; fi   
@@ -618,6 +619,9 @@ function write_license_file
    echo "  QCVERSION   ${with_version}">> ${tlicf}
    echo "  QCOLDVER    ${with_old_version}">> ${tlicf}
    echo "  QCLICOPT    ${lic_opt}"   >> ${tlicf}
+   if [ "x$qcloud_flexid" != "x" ] ; then
+      echo "  QCFLEXID    ${qcloud_flexid}"   >> ${tlicf}
+   fi
    echo "  #sta_sid  "               >> ${tlicf}
    local i; for (( i=0 ; i<${#sidstrlist[@]} ; i++ )) ; do  echo "      ${sidstrlist[$i]}" >> ${tlicf} ; done
    echo "  #end_sid  "               >> ${tlicf}
@@ -673,8 +677,12 @@ start_timer_spinner 3
 stop_spinner 
       
       
-      present_license_options
-      local lic_opt=$?
+      if [ "x$qcloud_dir" == "x" ] ; then
+         present_license_options
+         lic_opt=$?
+      else
+	 lic_opt="flexnet-aws"
+      fi
 
       if [ "x$lic_opt" == "x2" ] ; then
         lic_opt="flexnet"
