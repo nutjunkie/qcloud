@@ -16,6 +16,7 @@
 #
 #  The image can be built on a t2.micro instance with default resources.
 #      25 Gb volume on /dev/xvda1  mount on /
+#      This could determine the scratch
 #
 #  This file can be downloaded within the launched instance with the command:
 #
@@ -98,7 +99,6 @@ install_qchem()
 install_license()
 {
    cp $prefix/qcloud/qclic/qcloud_install.sh $HOME
-
 }
 
 
@@ -133,6 +133,7 @@ install_flexnet()
 
 plumb_pipes()
 { 
+   sudo mkdir -p /shared
    sudo mkdir -p $prefix/qcloud/redis
    sudo systemctl enable docker
    sudo systemctl enable $prefix/qcloud/services/piped.service
@@ -166,7 +167,7 @@ print_msg()
 cleanup()
 {
    echo "Removing AWS credentials and SSH keys"
-   rm -fr ~/.aws ~/.ssh master_AMI_setup.sh
+   rm -fr ~/.aws ~/.ssh 
    echo "Removing logs"
    sudo /usr/local/sbin/ami_cleanup.sh
 }
@@ -199,8 +200,9 @@ aws configure
 install_rpms
 install_docker_compose
 #install_qchem
+install_license
 install_qcloud
-#install_flexnet
+install_flexnet
 plumb_pipes
 build_containers
 #print_msg   
