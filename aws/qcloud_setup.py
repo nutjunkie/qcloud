@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+
 import os
 import re
 import sys
@@ -46,6 +47,14 @@ from pcluster.config.validators import (
 from pcluster.networking.vpc_factory import VpcFactory
 
 
+verbose = 0
+
+
+def debug(msg):
+    if (verbose > 0):
+        print(msg)
+
+
 
 class PClusterConfig:
       def __init__(self, config_file, label):
@@ -60,8 +69,7 @@ class PClusterConfig:
              print(msg.format(config_file))
              self.parser.read(config_file)
           else:
-             msg = "INFO: Configuration file {0} will be written."
-             print(msg.format(config_file))
+             debug("INFO: Configuration file {0} will be written.".format(config_file))
 
       def get(self, section, option, default=None):
           if not self.parser.has_section(section): return default
@@ -140,7 +148,7 @@ def create_session():
             sts_client = boto3.client('sts')
             sts_client.get_caller_identity()
             session = boto3.Session()
-            print("Creating session for region {0}".format(session.region_name))
+            debug("Creating session for region {0}".format(session.region_name))
             os.environ["AWS_DEFAULT_REGION"] = session.region_name
 
         except (botocore.exceptions.ClientError,
@@ -251,21 +259,28 @@ def create_security_group(label, vpc_id):
                 {
                     'Name': 'group-name',
                     'Values': [ group_name ]
+                },
+                {
+                    'Name': 'vpc-id',
+                    'Values': [ vpc_id ]
                 }
             ]
         )
 
-        #if response['SecurityGroups']
+        if response['SecurityGroups']:
+            print ("Found existing security group")
+            group_id = response['SecurityGroups'][0]['GroupId']
+            return group_id
 
-       
+        debug("Creating security group")
         response = ec2_client.create_security_group(
             Description = "QCloud security group",
             GroupName = group_name,
             VpcId = vpc_id
         )
         time.sleep(3)
-        #print(response)
         group_id = response['GroupId']
+
         print("GroupID:     {0}".format(group_id))
         data = ec2_client.authorize_security_group_ingress(
             GroupId = group_id,
@@ -291,8 +306,9 @@ def create_security_group(label, vpc_id):
         #print('Ingress Successfully Set %s' % data)
 
     except botocore.exceptions.ClientError as err:
-        # TODO parse err to see if group already exists
-        print(err)
+        err = string(err)
+        if "InvalidGroup.Duplicate" not in err:
+           print(err)
 
     return group_id
 
@@ -336,29 +352,43 @@ def create_vpc(session, config):
     return vpc_parameters
 
 
+def get_subnet(session, vpc_id):
+    ec2_client = session.client("ec2")
+    response = ec2_client.describe_subnets(
+        Filters=[
+            {'Name': 'vpc_id', 'Values': string(vpc_id) }
+        ]
+    )
+    print(response)
+    
 
 def get_vpc(session, config):
     vpc_id = None
     ec2_resource = session.resource("ec2")
 
-    # Check if there is an existing VPC 
-    vpcs = ec2_resource.vpcs.all()
-    avail = []
-    for vpc in vpcs:
-        if (vpc.state == 'available'):
-           for tag in vpc.tags:
-               val = tag['Value']
-               if 'QCloud-VPC' in val:
-                   avail.append("{0}  {1}  {2}".format(vpc.id, val, vpc.state))
-    if avail:
-        avail.insert(0, "Create new")
-        response = prompt_iterable("VPC", avail)
-        vpc_id = None if response == "Create new" else response.split()[0]
+    if False:
+       # Skip check for time being
+       # Check if there is an existing VPC 
+       vpcs = ec2_resource.vpcs.all()
+       avail = []
+       for vpc in vpcs:
+           if (vpc.state == 'available'):
+              for tag in vpc.tags:
+                  val = tag['Value']
+                  if 'QCloud-VPC' in val:
+                      avail.append("{0}  {1}  {2}".format(vpc.id, val, vpc.state))
+       if avail:
+           avail.insert(0, "Create new")
+           response = prompt_iterable("VPC", avail)
+           vpc_id = None if response == "Create new" else response.split()[0]
 
     vpc_params = {}
     if (vpc_id):
         vpc_params = {"vpc_id": vpc_id}
+        print(vpc_params)
         print("WARNING: Incomplete VPC parameter list returned")
+        #{'vpc_id': 'vpc-07d21de1c811c55f1', 'master_subnet_id': 'subnet-0ba6b98f5d5d81c55', 'use_public_ips': 'true'}
+        #print(vpc_params)
     else:
         vpc_params = create_vpc(session, config)
 
@@ -420,9 +450,11 @@ def prompt_queue_types(config):
     if (spot):
        spot_price = prompt("Spot pricing cap",
           lambda x: str(x).replace('.','',1).isdigit() and float(x) > 0, default_value=0.5)
-
     # We only consider the c5* family for the time being.
-    instances = get_comp_instances("c5", amd, ssd)
+    family = prompt("Compute node family: (t2/c5)",
+        lambda x: x in ("c5", "t2"), default_value="c5")
+
+    instances = get_comp_instances(family, amd, ssd)
     cores = []
     for k, v in instances:
         print("{0}: ({1})".format(k,v))
@@ -432,23 +464,32 @@ def prompt_queue_types(config):
     default_value = cores[4] if len(cores) >= 5 else cores[-1]
     max_node_size = prompt("Maximum cores/node size",
        lambda x: int(x) in cores, default_value=default_value)
+    min_node_size = prompt("Minimum cores/node size",
+       lambda x: int(x) in cores, default_value=max_node_size)
     queue_nodes = prompt("Maximum nodes/queue",
        lambda x: str(x).isdigit() and int(x) >= 0, default_value=10)
 
     queue_labels = []
-    for q in range(cores.index(int(max_node_size))+1):
+    min_idx = cores.index(int(min_node_size))
+    max_idx = cores.index(int(max_node_size))
+
+    for q in range(min_idx, max_idx+1):
         core_count   = cores[q]
-        queue_label  = '{0}{1}'.format(config.label,core_count)
+        instance_type = instances[q][1]
+        queue_label  = '{0}.{1}.{2}'.format(config.label, instance_type, core_count)
+        queue_label = queue_label.replace('.','-')
+        queue_label = queue_label.replace(' ','_')
         section_name = "queue {0}".format(queue_label)
         queue_params = make_queue(queue_label,spot)
         for k,v in queue_params.items():
             config.set(section_name, k, v)
         section_name = "compute_resource {0}".format(queue_label)
-        resources    = make_compute_resources(instances[q][1], queue_nodes, spot_price)
+        resources    = make_compute_resources(instance_type, queue_nodes, spot_price)
         for k,v in resources.items():
             config.set(section_name, k, v)
         queue_labels.append(queue_label)
 
+    print(queue_labels)
     return queue_labels
     
 
@@ -476,7 +517,7 @@ def configure_pcluster(session, args):
     # [global]
     section_name = "global"
     if config.parser.has_section(section_name):
-        if verbose: print("Using exisiting {0} section".format(section_name))
+        debug("Using exisiting {0} section".format(section_name))
     else:
         config.set(section_name, "cluster_template", label)
         config.set(section_name, "update_check", "true")
@@ -486,7 +527,7 @@ def configure_pcluster(session, args):
     # [aliases]
     section_name = "aliases"
     if config.parser.has_section(section_name):
-       if verbose: print("Using exisiting {0} section".format(section_name))
+       debug("Using exisiting {0} section".format(section_name))
     else:
         config.set(section_name, "ssh", "ssh {CFN_USER}@{MASTER_IP} {ARGS}")
     config.write()
@@ -498,7 +539,7 @@ def configure_pcluster(session, args):
     else:
         config.set(section_name, "scheduler", "slurm")
         config.set(section_name, "vpc_settings", label)
-        # config.set(section_name, "ebs_settings", label)
+        #config.set(section_name, "ebs_settings", label)
         config.set(section_name, "efs_settings", label)
         qcloud_ami = get_ami(session)
         config.set(section_name, "custom_ami", qcloud_ami)
@@ -532,14 +573,14 @@ def configure_pcluster(session, args):
         config.set(section_name, "queue_settings", ", ".join(queues))
     config.write()
 
-    # [ebs]
+    # [ebs] limits cluster size
     #section_name = "ebs {0}".format(label)
     #if config.parser.has_section(section_name):
     #   if verbose: print("Using exisiting {0} section".format(section_name))
     #else:
-    #   config.set(section_name, "shared_dir",  "shared")
+    #   config.set(section_name, "shared_dir",  "scratch")
     #   config.set(section_name, "volume_type", "gp2") # also st1
-    #   ebs_size = prompt("Shared storage size (Gb)",
+    #   ebs_size = prompt("Scratch size (Gb)",
     #      lambda x: str(x).isdigit() and int(x) >= 0, default_value=10)
     #   config.set(section_name, "volume_size", ebs_size)
     #config.write()
@@ -549,7 +590,7 @@ def configure_pcluster(session, args):
     if config.parser.has_section(section_name):
        if verbose: print("Using exisiting {0} section".format(section_name))
     else:
-       config.set(section_name, "shared_dir",  "shared")
+       config.set(section_name, "shared_dir",  "efs")
        config.set(section_name, "encrypted", "false")
        config.set(section_name, "performance_mode", "generalPurpose")
     config.write()
@@ -578,7 +619,7 @@ def configure_pcluster(session, args):
        for k,v in vpc_parameters.items():
            config.set(section_name, k, v)
        vpc_id =  vpc_parameters['vpc_id']
-       print("Created VPC:  {0}".format(vpc_id))
+       print("Using VPC:  {0}".format(vpc_id))
        security_group = create_security_group(label, vpc_id)
        config.set(section_name, "additional_sg", security_group)
     config.write()
@@ -588,10 +629,8 @@ def configure_pcluster(session, args):
 
 
 
-def pcluster_create(args):
+def pcluster_create(label, config_file):
     try:
-       config_file = args.config_file
-       label = args.label
        print("Creating VPC cluster {0} with config file {1}".format(label,config_file))
        cmd = "pcluster create -c {1} {0} --norollback".format(label,config_file);
        cmd = cmd.split()
@@ -604,62 +643,297 @@ def pcluster_create(args):
        sys.exit(1)
 
 
-def pcluster_info(args):
+
+def pcluster_info(session,label):
     try:
-       config_file = args.config_file
-       label = args.label
-       cmd = "pcluster status -c {1} {0}".format(label,config_file);
+        cmd = "pcluster status {0}".format(label)
+        res = subprocess.run(cmd.split(), stdout=subprocess.PIPE)
+        res = res.stdout.decode('utf-8').split()
+        res = {res[i]: res[i + 1] for i in range(0, len(res), 2)}
+ 
+        print("Status:       ", res["Status:"])
+        print("Cluster User: ", res["ClusterUser:"])
+        print("Master Server:", res["MasterServer:"])
+        print("Compute Fleet:", res["ComputeFleetStatus:"])
+ 
+        cmd = "pcluster instances {0}".format(label);
+        res = subprocess.run(cmd.split(), stdout=subprocess.PIPE)
+        res = res.stdout.decode('utf-8').split()
+
+        names = res[::2]
+        iids  = res[1::2]
+
+        if names:
+            print("Instances:    ")
+            ec2 = session.resource('ec2')
+            for r in range(len(names)):
+                iid = iids[r]
+                instance =  ec2.Instance(iid)
+                ip = instance.public_ip_address
+                ip = ip if ip else 'private'
+                itype = instance.instance_type
+                state = instance.state['Name']
+                print(f'    {iid:20} {names[r]:13} {ip:15}  {itype:12} {state:13}')
+ 
+    except KeyError as e:
+        print("pcluster returned incomplete status data")
+        print(e)
+
+    except FileNotFoundError as e:
+        print("pcluster: command not found")
+
+
+
+def get_master_instance(session, label):
+    instance = None
+    try:
+        cmd = "pcluster instances {0}".format(label);
+        res = subprocess.run(cmd.split(), stdout=subprocess.PIPE)
+        res = res.stdout.decode('utf-8').split()
+
+        names = res[::2]
+        iids  = res[1::2]
+
+        for r in range(len(names)):
+            if names[r] == 'MasterServer':
+                ec2 = session.resource('ec2')
+                instance = ec2.Instance(iids[r])
+                break
+ 
+    except FileNotFoundError as e:
+        print("pcluster: command not found")
+
+    return instance
+
+
+
+def get_vpc_id(session,label):
+    vpc_id = None
+    instance = get_master_instance(session,label)
+    if instance:
+        vpc_id = instance.vpc_id
+    return vpc_id
+
+
+
+def get_master_ip(session,label):
+    ip = None
+    instance = get_master_instance(session,label)
+    if instance:
+        ip = instance.public_ip_address
+    return ip
+
+
+
+def pcluster_command(command, label):
+    cmd = "pcluster {0} {1}".format(command,label)
+    res = subprocess.run(cmd.split(), stdout=subprocess.PIPE)
+    res = res.stdout.decode('utf-8').splitlines()
+    res = [x for x in res if not 'pcluster' in x]
+    return '\n'.join(res)
+
+
+
+def pcluster_update(label, config_file):
+    try:
+       print(f"Updating VPC cluster {label} with config file {config_file}")
+       ret = pcluster_command("stop", label)
+       print(ret)
+       cmd = f"pcluster update -c {config_file} {label}"
        cmd = cmd.split()
        code = os.spawnvpe(os.P_WAIT, cmd[0], cmd, os.environ)
        if code == 127:
           sys.stderr.write('{0}: command not found\n'.format(cmd[0]))
+          return
+       ret = pcluster_command("start", label)
+       print(ret)
 
     except:
        print("Unable to create cluster:", sys.exc_info()[0])
        sys.exit(1)
 
 
-
-
-def pcluster_start(args):
+def pcluster_start(label):
     try:
-       config_file = args.config_file
-       label = args.label
-       print("Starting VPC cluster {0} with config file {1}".format(label,config_file))
-       cmd = "pcluster start -c {1} {0}".format(label,config_file);
-       cmd = cmd.split()
-       code = os.spawnvpe(os.P_WAIT, cmd[0], cmd, os.environ)
-       if code == 127:
-          sys.stderr.write('{0}: command not found\n'.format(cmd[0]))
-       else:
-          print("Run the following command on the head node to get the license information:\n")
-          print("/opt/flexnet-11.18.0/bin/lmutil lmhostid -ptype AMZN -eip\n");
+        print("Starting VPC cluster {0}".format(label))
+        ret = pcluster_command("start", label)
+        print(ret)
+        ip = get_master_ip(session,label)
+        print("QCloud master node started on {0}".format(ip))
+        print("Log into the master node and run the following command to setup Q-Chem")
+        print("/home/ec2-user/qchem_install.sh")
 
-    except:
-       print("Unable to start cluster:", sys.exc_info()[0])
-       sys.exit(1)
+    except Exception as e:
+        print("Unable to start cluster: " + str(e))
 
 
 
-def pcluster_delete(args):
+def pcluster_restart(label):
     try:
-       config_file = args.config_file
-       label = args.label
-       print("Deleting VPC cluster {0} with config file {1}".format(label,config_file))
-       print("This will delete all AWS resources accociated with this cluster, including storage.")
-       response = input("Continue? [y/N]")
+        print("Restarting VPC cluster {0}".format(label))
+        ret = pcluster_command("start",label)
+        print(ret)
+        ip  = get_master_ip(session,label)
+        print("QCloud master node running on {0}".format(ip))
+    except Exception as e:
+        print("Unable to restart cluster: " + str(e))
 
-       if (response == 'y' or response == 'yes'):
-          cmd = "pcluster delete {0}".format(label);
-          cmd = cmd.split()
-          code = os.spawnvpe(os.P_WAIT, cmd[0], cmd, os.environ)
-          if code == 127:
-             sys.stderr.write('{0}: command not found\n'.format(cmd[0]))
 
+
+def pcluster_stop(label):
+    try:
+        print("Stopping {0} compute fleet".format(label))
+        ret = pcluster_command("stop",label)
+        print(ret)
+        ip  = get_master_ip(session,label)
+    except Exception as e:
+        print("Unable to stop cluster: " + str(e))
+
+
+
+def delete_nat_gateway(session,nat):
+    if (nat['State'] in ["deleted","deleting"]):
+        return
+
+    try:
+        nat_id = nat['NatGatewayId']
+        print("Deleting NAT gateway: {}".format(nat_id))
+        ec2 = session.client('ec2')
+
+        ec2.delete_nat_gateway(NatGatewayId=nat_id)
+        waiter = ec2.get_waiter('nat_gateway_available')
+        waiter.wait(Filters=[
+            { 'Name': 'state',          'Values': [ 'deleted' ] },
+            { 'Name': 'nat-gateway-id', 'Values': [ nat_id ] }
+        ])
+
+    except botocore.exceptions.WaiterError:
+        pass
+    except botocore.exceptions.ClientError as e:
+        if (not nat['State'] in ["deleted","deleting"]):
+            print("Unable to delete NAT gateway {}: ".format(nat_id) + str(e))
+
+
+def release_eip_address(session,eip):
+    try:
+        ec2 = session.client('ec2')
+        print(f'Releasing elastic IP address: {eip}')
+        response = ec2.release_address(AllocationId=eip)
+    except botocore.exception.ClientError as e:
+        print("Check elastic IP address has been released AllocationId: {eip}")
+
+
+
+def delete_subnet(session,subnet):
+    if (subnet.state in ["deleted","deleting"]):
+        return
+
+    sub_id = subnet.id
+
+    try:
+        print("Deleting subnet {}".format(sub_id))
+        ec2 = session.client('ec2')
+        ec2.delete_subnet(SubnetId=sub_id)
+        waiter = ec2.get_waiter('subnet_available')
+        #waiter.wait(Filters=[
+        #    { 'Name': 'state',     'Values': [ 'deleted' ] },
+        #    { 'Name': 'subnet-id', 'Values': [ sub_id ] }
+        #])
+    except botocore.exceptions.WaiterError:
+        pass
+    except botocore.exceptions.ClientError as e:
+        if (not subnet.state in ["deleted","deleting"]):
+            print("Unable to delete subnet {}: ".format(sub_id) + str(e))
+
+
+
+def delete_vpc(session, vpc_id):
+    zzz = 2
+    try:
+        print("Deleting dependencies for VPC: {0}".format(vpc_id))
+        ec2 = session.resource('ec2')
+        vpc = ec2.Vpc(vpc_id)
+
+        client = session.client('ec2')
+        nats = client.describe_nat_gateways(Filter=[{"Name": "vpc-id", "Values": [ vpc_id ]}])
+        nats = nats['NatGateways'] 
+        for nat in nats:
+            eip = nat['NatGatewayAddresses'][0]['AllocationId']
+            delete_nat_gateway(session,nat)
+            release_eip_address(session, eip)
+
+        for instance in vpc.instances.all():
+            print("Terminating instance: {0}".format(instance.id))
+            response = instance.terminate()
+            time.sleep(zzz)
+
+        for interface in vpc.network_interfaces.all():
+            print("Deleting network interface: {0}".format(interface.id))
+            response = interface.delete()
+            time.sleep(zzz)
+
+        for subnet in vpc.subnets.all():
+            delete_subnet(session, subnet)
+
+        for sg in vpc.security_groups.all():
+            if (sg.group_name != "default"):
+               print("Deleting security group: {0}".format(sg.id))
+               response = sg.delete()
+               time.sleep(zzz)
+
+        for igw in vpc.internet_gateways.all():
+            print("Deleting internet gateway {}".format(igw.id))
+            response = igw.detach_from_vpc(VpcId=vpc_id)
+            time.sleep(zzz)
+            response = igw.delete()
+            time.sleep(zzz)
+
+        for table in vpc.route_tables.all():
+            print("Deleting route table {}".format(table.id))
+            try:
+                response = table.delete()
+                time.sleep(zzz)
+            except botocore.exceptions.ClientError:
+                pass
+
+        print("Deleting VPC {}".format(vpc_id))
+        vpc.delete()
+        time.sleep(zzz)
+
+    except botocore.exceptions.ClientError as e:
+        print("ERROR: " + str(e))
+
+
+
+
+def pcluster_delete(session, label):
+    try:
+        print("Deleting cluster {0}".format(label))
+        print("This will delete all AWS resources associated with this cluster, including storage.")
+        response = input("Continue? [y/N] ")
+
+        if (response != 'y' and response != 'yes'):
+            return
+        vpc_id = get_vpc_id(session, label)
+        response = input("Delete VPC {0}? [y/N] ".format(vpc_id))
+
+        if (response != 'y' and response != 'yes'):
+            vpc_id = None
+
+        cmd = "pcluster delete {0}".format(label);
+        cmd = cmd.split()
+        code = os.spawnvpe(os.P_WAIT, cmd[0], cmd, os.environ)
+        if code == 127:
+            sys.stderr.write('{0}: command not found\n'.format(cmd[0]))
+        
+        if (vpc_id):
+            delete_vpc(session, vcp_id)
+
+    except NameError:
+        # Need to track this down
+        pass
     except:
-       print("Unable to delete cluster:", sys.exc_info()[0])
-       sys.exit(1)
-
+        print("Unable to delete cluster:", sys.exc_info()[0])
 
 
 
@@ -727,57 +1001,77 @@ def create_account():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser();
-    parser.add_argument("-f", "--file", dest="config_file", default="qcloud.config", 
+    parser = argparse.ArgumentParser(description='Manage QCloud clusters on AWS.');
+    parser.add_argument("--file", dest="config_file", default="qcloud.config", 
         help="Defines an alternative config file.")
 
-    parser.add_argument("-v", "--verbose", dest="verbose", action='store_true',
-        help="Increase printout level")
+    parser.add_argument("--label", dest="label", default="qcloud",
+        help="Provide and alternative name of the cluster stack")
 
-    parser.add_argument("-l", "--label", dest="label", default="qcloud",
-        help="Name of the cluster")
+    parser.add_argument("--config", dest="config",  action='store_true',
+        help='Configure the cluster (default)')
 
-    parser.add_argument("-k", "--keygen", dest="keygen",  action='store_true',
-        help="Generate keys")
-
-    parser.add_argument("-s", "--start", dest="start",  action='store_true',
+    parser.add_argument("--start", dest="start",  action='store_true',
         help='Start the cluster')
 
-    parser.add_argument("-x", "--delete", dest="delete",  action='store_true',
+    parser.add_argument("--stop", dest="stop",  action='store_true',
+        help='Stop the cluster')
+
+    parser.add_argument("--restart", dest="restart",  action='store_true',
+        help='Restart a stopped cluster')
+
+    parser.add_argument("--status", dest="info",  action='store_true',
+        help='Get information on the cluster')
+
+    parser.add_argument("--update", dest="update",  action='store_true',
+        help='Update the cluster configuration')
+
+    parser.add_argument("--delete", dest="delete",  action='store_true',
         help='Delete the cluster')
 
-    parser.add_argument("-i", "--info", dest="info",  action='store_true',
-        help='Get information on the cluster')
+    parser.add_argument("--delete-vpc", dest="delete_vpc",  default=None, 
+        help='Delete the VCP')
 
-    parser.add_argument("-t", "--status", dest="info",  action='store_true',
-        help='Get information on the cluster')
+    parser.add_argument("--keygen", dest="keygen",  action='store_true',
+        help="Generate ssh keys")
 
-    parser.add_argument("-c", "--config", dest="config",  action='store_true',
-        help='Configure the cluster')
+    parser.add_argument("--verbose", dest="verbose", action='store_true',
+        help="Increase printout level")
+
 
     args, extra_args = parser.parse_known_args()
 
+    verbose = args.verbose
     session = create_session()
-    #ami = get_ami(session)
-    #print("QCloud AMI set to: ",ami)
-    #sys.exit(1)
 
     if args.keygen:
        create_account()
 
     elif args.start:
-       pcluster_create(args)
-       pcluster_start(args)
+       pcluster_create(args.label, args.config_file)
+       pcluster_start(args.label)
 
     elif args.info:
-       pcluster_info(args)
+       pcluster_info(session,args.label)
+
+    elif args.stop:
+        pcluster_stop(args.label)
+
+    elif args.update:
+        pcluster_update(args.label, args.config_file)
+
+    elif args.restart:
+        pcluster_restart(args.label)
 
     elif args.delete:
-       pcluster_delete(args)
+       pcluster_delete(session,args.label)
+
+    elif args.delete_vpc:
+       delete_vpc(session,args.delete_vpc)
 
     elif args.config or len(sys.argv) == 1:
        configure_pcluster(session, args)
 
     else:
         print("Unrecognised argument:", sys.argv[1]);
-
+        parser.print_help()

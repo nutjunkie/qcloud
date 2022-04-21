@@ -1,0 +1,7 @@
+#! /bin/bash
+
+egress=/opt/qcloud/egress.pipe
+ingress=/opt/qcloud/ingress.pipe
+
+echo "$0 $@" > $egress
+cat $ingress

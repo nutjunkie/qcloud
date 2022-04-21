@@ -1,6 +1,7 @@
 $slurm
 #SBATCH --mem=20mb
 #SBATCH --time=0:05:00
+#SBATCH --export=HOME=/home/ec2-user
 #SBATCH --job-name=he-slurmtest2.inp
 $end
 

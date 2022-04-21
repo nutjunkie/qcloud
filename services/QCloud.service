@@ -1,11 +1,11 @@
 [Unit]
 Description=QCloud web and authentication services
 After=network.target 
-After=shared-qcloud.mount 
+After=efs.mount 
 After=piped.service
 Requires=docker.service 
 Requires=piped.service
-Requires=shared-qcloud.mount
+Requires=efs.mount
 
 [Service]
 Type=oneshot

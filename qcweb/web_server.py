@@ -106,8 +106,8 @@ class ListFiles(BaseHandler):
     def prepare(self):
         try:
             job = self.get_job()
-            if (job.status != "DONE"):
-               raise Exception("Job not completed")
+            #if (job.status != "DONE"):
+            #   raise Exception("Job not completed")
 
             filelist = job.files
             body = ''
@@ -213,6 +213,41 @@ class JobStatus(BaseHandler):
 
 
 
+class JobInfo(BaseHandler):
+    def prepare(self):
+        try:
+            job  = self.get_job()
+            info = self.job_manager.get_job_info(job)
+
+            self.write(info)
+
+            self.set_header("Qcloud-Server-Status", "OK")
+            self.set_header("Qcloud-Server-Jobid", job.jobid)
+            self.set_header("Qcloud-Server-Jobstatus", job.status)
+
+            self.set_header("Qchemserv-Status", "OK")
+            self.set_header("Qchemserv-Request", "info")
+            self.set_header("Qchemserv-Jobid", job.jobid)
+            self.set_header("Qchemserv-Jobstatus", job.status)
+
+        except tornado.web.MissingArgumentError as e:
+            msg = "Missing argument: " + str(e)
+            self.set_header("Qcloud-Server-Message", msg)
+
+        except Exception as e:
+            msg = str(e);
+            logging.error(msg)
+            self.set_header("Qcloud-Server-Message", msg)
+
+    def get(self):
+        pass
+
+    def post(self):
+        pass
+
+
+
+
 class DeleteJob(BaseHandler):
     def prepare(self):
         try:
@@ -265,6 +300,7 @@ class ComputeServer(tornado.web.Application):
             (r"/delete",   DeleteJob, args),  
             (r"/status",   JobStatus, args),
             (r"/list",     ListFiles, args),
+            (r"/info",     JobInfo,   args),
             (r"/download", Download,  args),
         ]   
 

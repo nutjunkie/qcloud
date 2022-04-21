@@ -15,14 +15,14 @@ class UserManager():
         self.rdb = redis.StrictRedis(host=host, port=port, db=0, 
            charset='utf-8', decode_responses=True)
 
-        # new salt can be generated with:
-        # salt = bcrypt.gensalt()
         salt = bytes(config.get("authentication", "salt").encode())
-        #print("salt = ",salt, " ", type(salt))
+        logging.info("Using salt:  {0}  of type  {1}".format(salt, type(salt)))
 
         self.salt  = salt
         self.anon  = config.getboolean("authentication", "anon")
         self.admin = config.get("authentication", "admin_account")
+
+        self.set_admin_password(config.get("authentication", "admin_password"))
         self.userid_re = re.compile("^[a-z0-9]{32}$")
         self.username_re = re.compile("^[a-zA-Z0-9_.-]+$")
 
@@ -103,6 +103,7 @@ class UserManager():
         else:
            hashpw = bcrypt.hashpw(password.encode('utf-8'), self.salt)
            hashpw = hashpw.decode('utf-8')
+           logging.info("Hashed password for user {0} : {1}".format(user, hashpw))
 
            if (not self.user_exists(user)):
               raise Exception("Unknown user: " + user)
@@ -113,8 +114,11 @@ class UserManager():
 
     def set_admin_password(self, password):
         userid = 1
-        hashpw = bcrypt.hashpw(password.encode('utf-8'), self.salt)
-        hashpw = hashpw.decode('utf-8')
+        # password should be hashed in the config file
+        #hashpw = bcrypt.hashpw(password.encode('utf-8'), self.salt)
+        #hashpw = hashpw.decode('utf-8')
+        hashpw = password
+        logging.info("Setting qcloud administrator password {}".format(hashpw))
         self.rdb.hset("user:"+self.admin, 'id', userid)
         self.rdb.hset("user:"+self.admin, 'pw', hashpw)
         return userid

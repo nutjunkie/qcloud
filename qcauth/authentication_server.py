@@ -215,7 +215,6 @@ class AuthenticationServer(tornado.web.Application):
         logging.info("JWT expiry: " + jwt_expiry)
 
         usr_man = user_manager.UserManager(config)
-        usr_man.set_admin_password(config.get("authentication", "admin_password"))
 
         args = dict(jwt_code     = jwt_code, 
                     jwt_expiry   = jwt_expiry,

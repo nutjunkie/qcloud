@@ -27,6 +27,17 @@
 #    rm -fr ~/.aws ~/.ssh
 #    rm master_AMI_setup.sh
 #    sudo /usr/local/sbin/ami_cleanup.sh
+#    sudo rm /etc/munge/munge.key 
+#
+#    !!!! need to add log rotation /etc/logrotate.conf
+#
+#/var/log/piped.log {
+#   missingok
+#   create 644 root root
+#   size 100k
+#   rotate 4
+#}
+
 #
 #  Once the instance has been stopped, an AMI can be created, right click on the instance ID:
 #     Images and templates -> Create image
@@ -50,6 +61,7 @@ install_docker_compose()
       echo "Installing docker-compose"
       sudo curl -L "https://github.com/docker/compose/releases/download/1.28.6/docker-compose-$(uname -s)-$(uname -m)" -o $docker_compose
       sudo chmod a+x $docker_compose 
+      sudo ln -s $docker_compose  /usr/bin/docker-compose
    else
       echo "Detected existing docker-compose installation, skipping."
    fi
@@ -63,19 +75,16 @@ install_qcloud()
       cd && git clone https://github.com/nutjunkie/qcloud qcloud
       sudo mv qcloud $prefix
       sudo chmod a+x $prefix/qcloud/bin/* 
+      cp $prefix/qcloud/aws/setup.sh $HOME
 
       sudo rm -fr $prefix/qcloud/.git
       sudo rm -fr $prefix/qcloud/aws
       sudo rm -fr $prefix/qcloud/client
+      sudo rm -fr $prefix/qcloud/qcmon
+      sudo rm -fr $prefix/qcloud/qclic
    else
       echo "Detected existing qcloud installation, skipping."
    fi
-}
-
-
-install_license()
-{
-   cp $prefix/qcloud/qclic/qchem_install.sh $HOME
 }
 
 
@@ -140,6 +149,8 @@ cleanup()
 }
 
 
+#  Main program  #
+
 pcfile="/opt/parallelcluster/.bootstrapped"
 url="https://github.com/aws/aws-parallelcluster/blob/v$pcluster_version/amis.txt"
 
@@ -166,7 +177,6 @@ fi
 aws configure
 install_rpms
 install_docker_compose
-install_license
 install_qcloud
 install_flexnet
 plumb_pipes

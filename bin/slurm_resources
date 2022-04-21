@@ -1,51 +1,34 @@
 #! /bin/bash
 
-   # Script to set the memory resources on AWS compute instatnces
+#
+#  Script to set the memory resources on AWS compute instances
+#
 
    PCLUSTER_DIR="/opt/slurm/etc/pcluster"
    IFS=$'\n'
+
+   region=$(ec2-metadata --availability-zone | sed 's/placement: \(.*\).$/\1/')
 
    partitions=($(ls $PCLUSTER_DIR/*partition.conf))
 
    for partition in "${partitions[@]}"
    do
       line=$(grep NodeName $partition)
-      if [[ $line == *"RealMemory"* ]]; then
-         echo "Memory set in $partition"
-      else
-	 value=1000
-         if [[ $line == *"c5.large"* ]]; then
-            value=3704
-            value=3200
-         elif [[ $line == *"c5.xlarge"* ]]; then
-            value=7624
-            value=7100
-         elif [[ $line == *"c5.2xlarge"* ]]; then
-            value=15575
-            value=15000
-         elif [[ $line == *"c5.4xlarge"* ]]; then
-            value=31366
-            value=30800
-         elif [[ $line == *"c5.9xlarge"* ]]; then
-            value=70340
-            value=69800
-         elif [[ $line == *"c5.12xlarge"* ]]; then
-            value=94530
-            value=94000
-         elif [[ $line == *"c5.18xlarge"* ]]; then
-            value=140768
-            value=140200
-         elif [[ $line == *"c5.24xlarge"* ]]; then
-            value=189148
-            value=188600
+      line=$(echo $line | sed 's/ RealMemory=[[:digit:]]\+//g')
 
-	 else
-            echo "Unrecognised instance type in slurm_resources" > /tmp/slurm_resources.log
-	 fi
+      echo "region = $region"
+      instance=$(echo $line | awk 'BEGIN { FS = "Feature=" } ; { print $2 }' )
+      # instance type is assumed to be the second field
+      instance=$(echo $instance | awk 'BEGIN { FS = "," } ; { print $2 }' )
+      echo "instance = $instance"
+      memory=$(aws ec2 describe-instance-types --region $region --instance-types $instance | grep SizeInMiB | awk '{ print $2 }')
+      echo "total memory = $memory"
+      # 500 accounts for the system overhead, 250 is too small on c5.large
+      memory=$(($memory-500))
+      echo "SLURM memory = $memory"
 
-	 line="$line RealMemory=$value"
-	 sed -i "/NodeName/c$line" $partition
-      fi
+      line="$line RealMemory=$memory"
+      sed -i "/NodeName/c$line" $partition
    done
 
    systemctl restart slurmctld

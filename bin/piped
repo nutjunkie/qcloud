@@ -9,7 +9,7 @@
 
 egress=/opt/qcloud/egress.pipe
 ingress=/opt/qcloud/ingress.pipe
-logfile=/opt/qcloud/piped.log
+logfile=/var/log/piped.log
 
 if [ ! -p "$egress" ]; then
    mkfifo $egress

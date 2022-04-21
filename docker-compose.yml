@@ -75,6 +75,7 @@ services:
          - /opt/qcloud/bin/sbatch:/opt/slurm/bin/sbatch
          - /opt/qcloud/bin/squeue:/opt/slurm/bin/squeue
          - /opt/qcloud/bin/scancel:/opt/slurm/bin/scancel
+         - /opt/qcloud/bin/scontrol:/opt/slurm/bin/scontrol
          - type:    bind
            source: ./config/qcloud.cfg
            target: /opt/qcloud/qcloud.cfg

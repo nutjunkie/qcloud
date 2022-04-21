@@ -105,6 +105,8 @@ class JobManager():
         fh.write(slurm_input) 
         fh.write("\n")
         fh.write("#SBATCH --chdir={0}\n\n".format(jobdir))
+        # The following is a temp hack as qchem interrogates $HOME
+        fh.write("export HOME=/home/ec2-user\n")
         fh.write("export QC={0}\n".format(self.qc))
         fh.write("export QCAUX={0}\n".format(self.qcaux))
         fh.write("export QCSCRATCH={0}\n".format(self.qcscratch))
@@ -153,6 +155,20 @@ class JobManager():
            return job
 
 
+
+    def get_job_info(self, job):
+        sid = int(job.slurmid)
+        info = ''
+        if (sid > 0):
+            cmd = f"{slurm_path}/scontrol show job {sid}"
+            info = subprocess.getoutput(cmd)
+            #logging.info("scontrol command:  {}".format(cmd))
+            #logging.info("scontrol type:     {}".format(type(info)))
+            #logging.info("scontrol returned: {}".format(info))
+
+        return info 
+
+
     # valid status: QUEUED, RUNNING, DONE, ERROR, DELETED, INVALID
 
     def update_job(self, job):
@@ -176,6 +192,27 @@ class JobManager():
               if (job.status == "DONE"):
                  self.update_job_files(job.jobid)
         
+    def update_job(self, job):
+        if (int(job.slurmid) > 0):
+           if (job.status == "QUEUED" or job.status == "RUNNING"):
+              cmd = '%s/squeue -h --job %s' % (slurm_path,job.slurmid)
+              output = subprocess.getoutput(cmd)
+              #logging.info("squeue returned: %s" % output)
+              tokens = output.lstrip().rstrip().split()
+
+              if (len(tokens) > 4):
+                 token = tokens[4]
+                 if (token == "R" or token == "CG"):
+                    job.status = "RUNNING"
+                 else:
+                    job.status = "QUEUED"
+              else:
+                 job.status = "DONE"
+
+              self.update_job_status(job.jobid,job.status)
+              if (job.status == "DONE"):
+                 self.update_job_files(job.jobid)
+ 
               
 
     def get_job_file(self, jobid, fname):

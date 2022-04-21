@@ -36,7 +36,7 @@ def help(arg):
 
 
 
-class QcloudError(Exception):
+class QCloudError(Exception):
     pass
 
 
@@ -75,7 +75,7 @@ def update_config(section, key, value):
 
 def write_config_file(config_file):
     if (not config_file): 
-       raise QcloudError("Config file not set")
+       raise QCloudError("Config file not set")
     with open(CONFIG_FILE, 'w') as cfg:
        CONFIG.write(cfg)
 
@@ -101,7 +101,7 @@ def addhost(args):
     if (not comp_port): 
        comp_port = 8883
     if (not test_socket(comp_host, comp_port)): 
-       raise QcloudError("Host unreachable")
+       raise QCloudError("Host unreachable")
 
     auth_host = input("Authorisation host [{0}]: ".format(comp_host)).strip()
     if (not auth_host): 
@@ -111,7 +111,7 @@ def addhost(args):
     if (not auth_port): 
        auth_port = 8882
     if (not test_socket(auth_host, auth_port)): 
-       raise QcloudError("Host unreachable")
+       raise QCloudError("Host unreachable")
 
     debug("Computational host: {0}".format(comp_host))
     debug("Computational port: {0}".format(comp_port))
@@ -129,7 +129,7 @@ def addhost(args):
 
 def checkhost(dummy):
     if ("host" not in CONFIG):
-       raise QcloudError("Use 'qcloud addhost' to set host machine")
+       raise QCloudError("Use 'qcloud addhost' to set host machine")
 
     host = CONFIG.get("host", "computational_host") 
     port = CONFIG.get("host", "computational_port")
@@ -145,9 +145,9 @@ def checkhost(dummy):
 
 def check_config():
     if ("host" not in CONFIG):
-       raise QcloudError("Use 'qcloud addhost' to set host machine")
+       raise QCloudError("Use 'qcloud addhost' to set host machine")
     if ("user" not in CONFIG):
-       raise QcloudError("Use 'qcloud adduser' to set user name")
+       raise QCloudError("Use 'qcloud adduser' to set user name")
     
 
 
@@ -225,11 +225,12 @@ def request_submit(token, input):
     res = urllib.request.urlopen(req, timeout=5)
     debug("Submit URL: %s" % url)
 
-    jobid = 0
+    jobid = None
     if (check_response_status(res)):
-       jobid = res.headers.get("Qcloud-Server-Jobid")
        slurmid = res.headers.get("Qcloud-Server-Slurmid")
-       print("SLURM ID: {0}".format(slurmid))
+       if (int(slurmid) > 0):
+          debug("SLURM ID: {0}".format(slurmid))
+          jobid = res.headers.get("Qcloud-Server-Jobid")
 
     return jobid 
 
@@ -237,7 +238,7 @@ def request_submit(token, input):
 
 def request_new_token():
     if ("user" not in CONFIG):
-       raise QcloudError("Use 'qcloud adduser' to set user name")
+       raise QCloudError("Use 'qcloud adduser' to set user name")
     username = CONFIG.get("user", "name")
     prompt = "Password for " + username + ": "
     password = getpass.getpass(prompt)
@@ -248,7 +249,7 @@ def request_new_token():
 
     res = urllib.request.urlopen(req)
     if (not check_response_status(res)):
-       raise QcloudError("Unable to obtain new token") 
+       raise QCloudError("Unable to obtain new token") 
 
     token = res.headers.get("Qcloud-Token")
     CONFIG.set("user", "token", token)
@@ -270,6 +271,25 @@ def request_status(token, jobid):
 
 
 
+def request_info(token, jobid):
+    data = urllib.parse.urlencode({'cookie' : token, 'jobid' : jobid })
+    data = data.encode('ascii')
+    req  = urllib.request.Request(comp_host() + "/info", data)
+    res  = urllib.request.urlopen(req)
+
+    if (check_response_status(res)):
+       status = res.headers.get("Qcloud-Server-Jobstatus")
+       if (status == "QUEUED" or status == "RUNNING"):
+          info = res.read().decode().split("\n") 
+          while("" in info):
+              info.remove("")
+       else:
+          info = "Job state: " + status
+
+    return info
+
+
+
 def request_delete(token, jobid):
     data = urllib.parse.urlencode({'cookie' : token, 'jobid' : jobid })
     data = data.encode('ascii')
@@ -287,6 +307,7 @@ def request_list(token, jobid):
     data = data.encode('ascii')
     req  = urllib.request.Request(comp_host() + "/list", data)
     res  = urllib.request.urlopen(req)
+
     if (check_response_status(res)):
        files = res.read().decode().split("\n") 
        while("" in files):
@@ -305,27 +326,33 @@ def request_download(token, jobid, file):
        return res.read().decode()
 
 
+
 def get_current_token():
     if ("user" not in CONFIG or "token" not in CONFIG["user"]):
-         raise QcloudError("Use 'qcloud adduser' to set user name")
+         raise QCloudError("Use 'qcloud adduser' to set user name")
     return CONFIG.get("user", "token")
 
 
 
 def adduser(args):
     if ("host" not in CONFIG or "admin_account" not in CONFIG["host"]):
-       raise QcloudError("Use 'qcloud addhost' to set host machine")
+       raise QCloudError("Use 'qcloud addhost' to set host machine")
 
     if ("user" in CONFIG and "name" in CONFIG["user"]):
-       raise QcloudError("User " + CONFIG.get("user", "name") + " exists in " + CONFIG_FILE)
+       print("User {0} exists in {1}".format(CONFIG.get("user", "name"), CONFIG_FILE))
+       
+       response = input("Overwrite? [y/N] ")
+       response = response.lower()
+       if (response.lower() not in ['y', 'yes']):
+          return
 
-    rootpw = getpass.getpass("Qcloud admin password: ")
+    rootpw = getpass.getpass("QCloud admin password: ")
     token  = request_token(CONFIG.get("host","admin_account"), rootpw)
     uname  = sys.argv[0] if (len(args) == 1) else input("User name: ")
 
     if (not username_is_valid(uname)):
        print("Usage:  qcloud adduser [username]")
-       raise QcloudError("User name must betweeen 3-20 alphanumeric characters")
+       raise QCloudError("User name must betweeen 3-20 alphanumeric characters")
 
     tries = 0
     prompt = "Password for " + uname + ": "
@@ -335,11 +362,11 @@ def adduser(args):
         userpw = getpass.getpass(prompt)
         ++tries
     if (tries == 3): 
-       raise QcloudError("Request failed: password too short")
+       raise QCloudError("Request failed: password too short")
 
     userpw2 = getpass.getpass("Re-enter password: ")
     if (userpw != userpw2):  
-       raise QcloudError("Request failed: passwords do not match")
+       raise QCloudError("Request failed: passwords do not match")
 
     token = request_adduser(uname, userpw, rootpw)
 
@@ -371,7 +398,7 @@ def remove_job(jid):
 
 def matching_jobs(patterns):
     if ("jobs" not in CONFIG):
-       raise  QcloudError("No jobs found")
+       raise  QCloudError("No jobs found")
 
     all_jobs = CONFIG["jobs"]
     jobs = []
@@ -409,13 +436,29 @@ def status(args):
            print(status, relpath(jobid))
 
 
+
+def info(args):
+    jobs = matching_jobs(args)
+
+    if (jobs):
+        for jobid in jobs:
+            info = request_info(get_current_token(), jobid)
+            if (info):
+               info = "\n".join(info)
+               print(info)
+            else:
+               print("No information available")
+    else:
+       print("Job not found")
+
+
+
 def delete(args):
     jobs = matching_jobs(args)
 
     for jobid in jobs:
         status = request_delete(get_current_token(), jobid)
         print("Deleteing job from queue id: %s - status" % (jobid,status))
-
 
 
 
@@ -431,7 +474,18 @@ def download(jobs):
 
         files = request_list(get_current_token(), jobid)
         if (not files):
-           raise QcloudError("No files to download")
+           raise QCloudError("No files to download")
+
+        if (not DEBUG):
+            # Filter out the unnecessary files
+            regex = re.compile(r'^slurm-[0-9]+.out$')
+            files = [i for i in files if not regex.match(i)]
+            regex = re.compile(r'^input_[0-9]+.[0-9]+$')
+            files = [i for i in files if not regex.match(i)]
+            regex = re.compile(r'^batch$')
+            files = [i for i in files if not regex.match(i)]
+            
+
         fnames = { "input"      : inp, 
                    "output"     : base + ".out",
                    "fchk"       : base + ".fchk",
@@ -446,13 +500,6 @@ def download(jobs):
                fname = fnames.get(file, file)
                debug("  %s -> %s" % (file, fname))
                path = os.path.join(dir, fname)
-
-#              if os.path.isfile(path):
-#                 response = input("Overwrite %s? [Y/n] " % path)
-#                 if (response == 'n' or response == 'N'):
-#                    while os.path.isfile("%s_%s".format(path,k)):
-#                       ++k;
-#                    path += "_"+str(k)
 
                print("Downloading " + path)
 
@@ -557,9 +604,12 @@ if __name__ == '__main__':
                  'clear'   : clear,
                  'delete'  : delete,
                  'del'     : delete,
+                 'info'    : info,
                  'getall'  : get_all,
                  'adduser' : adduser,
+                 'setuser' : adduser,
                  'addhost' : addhost,
+                 'sethost' : addhost,
                  'ping'    : checkhost,
                  'help'    : help }
 
@@ -597,10 +647,10 @@ if __name__ == '__main__':
           print("File not found: " +  e.filename)
 
     except urllib.error.HTTPError as e:
-       print("Request failed: " + e.reason)
+       print("Request failed (HTTPError): " + e.reason)
 
     except urllib.error.URLError as e:
        print("Request failed: " + e.reason)
 
-    except (QcloudError, Exception) as e:
+    except (QCloudError, Exception) as e:
        print(str(e))
