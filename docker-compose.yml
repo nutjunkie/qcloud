@@ -42,20 +42,6 @@ services:
            target: /opt/qcloud/qcloud.cfg
 
 
-   monitor:
-      image: qcmon:1.0.0
-      build: qcmon
-      hostname: qcmon
-      container_name: qcmon
-      networks:
-         - qcnet
-      volumes:
-         - /shared/jobs:/shared/jobs
-         - type:    bind
-           source: ./config/qcloud.cfg
-           target: /opt/qcloud/qcloud.cfg
-
-
    qcweb:
       image: qcweb:1.0.0
       build: qcweb
@@ -69,7 +55,7 @@ services:
       networks:
          - qcnet
       volumes:
-         - /shared/jobs:/shared/jobs
+         - /efs/jobs:/efs/jobs
          - /opt/qcloud/egress.pipe:/opt/qcloud/egress.pipe
          - /opt/qcloud/ingress.pipe:/opt/qcloud/ingress.pipe
          - /opt/qcloud/bin/sbatch:/opt/slurm/bin/sbatch
